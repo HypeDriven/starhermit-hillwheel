@@ -1,0 +1,3 @@
+name=Hillwheel
+launch=index.html
+server=server.js
