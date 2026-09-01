@@ -2,7 +2,7 @@
 // Content is versioned data: id, seed, initial state params, goals, allowed mechanics,
 // par values, tutorial flags, presentation theme.
 
-import { createState, step, hashState, TERMINAL, TICK_RATE, scoreBreakdown } from './rules.mjs';
+import { createState, step, hashState, TERMINAL, TICK_RATE, scoreBreakdown } from './rules.js';
 
 export const CONTENT_SCHEMA_VERSION = 2;
 export const CONTENT_VERSION = '2.0.0';

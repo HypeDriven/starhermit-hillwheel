@@ -3,8 +3,8 @@
 // Replay envelope: schema version, build/content version, seed, initial hash,
 // ordered commands, periodic state hashes, terminal result.
 
-import * as rules from './rules.mjs';
-import { CONTENT_VERSION } from './content.mjs';
+import * as rules from './rules.js';
+import { CONTENT_VERSION } from './content.js';
 
 export const SESSION_SCHEMA_VERSION = 2;
 export const REPLAY_SCHEMA_VERSION = 2;

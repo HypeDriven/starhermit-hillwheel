@@ -45,9 +45,9 @@ const db = {
 let rulesP = null, sessionP = null, contentP = null;
 function mods() {
 	if (!rulesP) {
-		rulesP = import('./rules.mjs');
-		sessionP = import('./session.mjs');
-		contentP = import('./content.mjs');
+		rulesP = import('./rules.js');
+		sessionP = import('./session.js');
+		contentP = import('./content.js');
 	}
 	return Promise.all([rulesP, sessionP, contentP]);
 }
@@ -70,7 +70,7 @@ function rateLimited(ip, cost = 1, capacity = 120, refillPerSec = 10) {
 
 const MIME = {
 	'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-	'.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+	'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
 	'.json': 'application/json', '.txt': 'text/plain; charset=utf-8',
 	'.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 	'.opus': 'audio/ogg',
@@ -119,7 +119,7 @@ function serveStatic(req, res, urlPath) {
 	fs.readFile(file, (err, data) => {
 		if (err) return sendError(res, 404, 'not_found');
 		const ext = path.extname(file).toLowerCase();
-		const immutable = ext === '.js' || ext === '.mjs' || ext === '.css';
+		const immutable = ext === '.js' || ext === '.js' || ext === '.css';
 		res.writeHead(200, {
 			'Content-Type': MIME[ext] || 'application/octet-stream',
 			'Cache-Control': immutable ? 'public, max-age=3600' : 'no-cache',

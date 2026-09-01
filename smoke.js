@@ -1,7 +1,7 @@
 // Hillwheel browser smoke test (Playwright + Chromium).
 // Serves the distribution via server.js, loads the game, drives it with keyboard
 // input through title -> countdown -> active play, checks HUD/results and console errors.
-// Run: node smoke.mjs
+// Run: node smoke.js
 
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';

@@ -3,8 +3,8 @@
 // Cosmetic randomness uses its own seeded stream and never touches rules.
 
 import * as THREE from 'three';
-import { mulberry32 } from './rules.mjs';
-import { getTheme } from './content.mjs';
+import { mulberry32 } from './rules.js';
+import { getTheme } from './content.js';
 
 export const QUALITY_TIERS = { low: 0, medium: 1, high: 2 };
 export const QUALITY_CONFIG = {

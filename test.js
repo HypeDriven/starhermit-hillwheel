@@ -1,12 +1,12 @@
 // Hillwheel test suite: rules units, deterministic replay property tests, fuzzing,
 // golden sessions, content validators, and server API smoke tests.
-// Run: node test.mjs
+// Run: node test.js
 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import * as R from './rules.mjs';
-import * as C from './content.mjs';
-import { Session, verifyReplay } from './session.mjs';
+import * as R from './rules.js';
+import * as C from './content.js';
+import { Session, verifyReplay } from './session.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {

@@ -2,13 +2,13 @@
 // boot → title → profile-ready → mode-select → preparing → countdown →
 // active ↔ paused → resolving → results → progression.
 
-import * as rules from './rules.mjs';
-import * as content from './content.mjs';
-import { createSession, verifyReplay } from './session.mjs';
-import { createRender } from './render.mjs';
-import { createUi, loadSettings, saveSettings, loadProgress, saveProgress, STRINGS } from './ui.mjs';
-import { createAudio } from './audio.mjs';
-import { createPlatform } from './platform.mjs';
+import * as rules from './rules.js';
+import * as content from './content.js';
+import { createSession, verifyReplay } from './session.js';
+import { createRender } from './render.js';
+import { createUi, loadSettings, saveSettings, loadProgress, saveProgress, STRINGS } from './ui.js';
+import { createAudio } from './audio.js';
+import { createPlatform } from './platform.js';
 
 export const GAME_SCHEMA_VERSION = 2;
 export const BUILD_VERSION = '1.0.0';

@@ -1,6 +1,6 @@
 // Hillwheel bootstrap: host handshake, capability detection, asset manifest, lifecycle.
 
-import { createGame } from './game.mjs';
+import { createGame } from './game.js';
 
 export const BOOTSTRAP_SCHEMA_VERSION = 2;
 
