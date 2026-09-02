@@ -34,7 +34,7 @@ export class RenderModule {
 		this.renderer.toneMappingExposure = 1.0;
 		if (this.q.shadows) {
 			this.renderer.shadowMap.enabled = true;
-			this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+			this.renderer.shadowMap.type = THREE.PCFShadowMap;
 		}
 
 		this.scene = new THREE.Scene();
