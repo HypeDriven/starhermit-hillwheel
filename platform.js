@@ -1,6 +1,9 @@
 // Hillwheel platform: token-aware REST adapter, retries, rate-limit handling,
 // server-time sync, telemetry consent. Uses same-origin /api routes when hosted.
 // Never persists access or launch tokens. Degrades gracefully offline.
+// The host guarantees exactly one route: GET /api/v1/time. Every other route
+// exists only on the local dev server, so each hosted feature below is a local
+// no-op that never issues a request — the production host would 404 them.
 
 export const PLATFORM_SCHEMA_VERSION = 2;
 
@@ -14,6 +17,7 @@ export class PlatformModule {
 		this.launchToken = null;   // short-lived, in-memory only
 		this.timeOffsetMs = 0;     // server time minus local time
 		this.online = false;
+		this.hosted = false;       // true only after the /api/v1/time probe succeeds
 		this.telemetryConsent = false;
 		this.sessionId = `anon-${Math.random().toString(36).slice(2, 10)}`;
 		this._presenceTimer = null;
@@ -62,15 +66,18 @@ export class PlatformModule {
 	}
 
 	// Synchronize clock with the platform: round-trip-adjusted offset.
+	// This is the one route the host is known to serve; it doubles as the
+	// startup probe that sets the 'hosted' flag.
 	async syncTime() {
 		const t0 = Date.now();
 		const res = await this._request('/api/v1/time', { retries: 1 });
-		if (!res.ok) return res;
+		if (!res.ok) { this.hosted = false; return res; }
 		const t1 = Date.now();
 		const rtt = t1 - t0;
 		const serverNow = res.data.serverTime + rtt / 2;
 		this.timeOffsetMs = serverNow - t1;
 		this.serverDate = res.data.date;
+		this.hosted = true;
 		return { ok: true, offsetMs: this.timeOffsetMs, date: res.data.date, rtt };
 	}
 
@@ -81,53 +88,52 @@ export class PlatformModule {
 	}
 
 	// --- Daily sessions, scores, leaderboards, achievements --------------------
+	// None of these routes are guaranteed by the host, so every one resolves to
+	// a local no-op without issuing a request. Daily content itself is
+	// generated deterministically in content.js and needs no network.
 
-	async getDaily() { return this._request('/api/v1/daily'); }
+	async getDaily() { return { ok: false, error: 'offline', recoverable: true }; }
 
 	async submitScore(payload) {
 		// payload: { mode, contentId, seed, ruleset, contentVersion, assists, durationTicks,
 		//            breakdown, inputLog, hashLog, initialHash, sessionId }
-		return this._request('/api/v1/scores', { method: 'POST', body: payload });
+		return { ok: false, error: 'offline', recoverable: true };
 	}
 
 	async getLeaderboard(board = 'global', contentId = null) {
-		const q = contentId ? `?board=${board}&content=${encodeURIComponent(contentId)}` : `?board=${board}`;
-		return this._request('/api/v1/leaderboard' + q);
+		return { ok: false, error: 'offline', recoverable: true };
 	}
 
 	async unlockAchievement(key, sessionId) {
-		return this._request('/api/v1/achievements', { method: 'POST', body: { key, sessionId } });
+		return { ok: false, error: 'offline', recoverable: true };
 	}
 
-	async getAchievements() { return this._request('/api/v1/achievements'); }
+	async getAchievements() { return { ok: false, error: 'offline', recoverable: true }; }
 
 	// --- Cloud saves (versioned, checksummed) -----------------------------------
+	// Saves live in local storage (see ui.js); the host has no save route.
 
-	async loadSave() { return this._request('/api/v1/save'); }
-	async storeSave(doc) { return this._request('/api/v1/save', { method: 'PUT', body: doc }); }
+	async loadSave() { return { ok: false, error: 'offline', recoverable: true }; }
+	async storeSave(doc) { return { ok: false, error: 'offline', recoverable: true }; }
 
 	// --- Presence + activity -----------------------------------------------------
+	// The host serves no presence/activity routes; both are local no-ops.
 
-	startActivity() { return this._request('/api/v1/activity/start', { method: 'POST', body: { sessionId: this.sessionId } }); }
+	startActivity() { return { ok: false, error: 'offline', recoverable: true }; }
 	endActivity() {
 		this.stopPresence();
-		return this._request('/api/v1/activity/end', { method: 'POST', body: { sessionId: this.sessionId } });
+		return { ok: false, error: 'offline', recoverable: true };
 	}
-	startPresence() {
-		this.stopPresence();
-		this._presenceTimer = setInterval(() => {
-			this._request('/api/v1/presence', { method: 'POST', body: { sessionId: this.sessionId }, retries: 0 });
-		}, 30000);
-	}
+	startPresence() { this.stopPresence(); }
 	stopPresence() { if (this._presenceTimer) { clearInterval(this._presenceTimer); this._presenceTimer = null; } }
 
 	// --- Telemetry (anonymous funnel only, consent gated) ------------------------
+	// The host serves no telemetry route; events are dropped locally.
 
 	track(event, props = {}) {
 		if (!this.telemetryConsent) return;
 		const allowed = ['start', 'tutorial_step', 'round_end', 'retry', 'settings_change', 'error'];
 		if (!allowed.includes(event)) return;
-		this._request('/api/v1/telemetry', { method: 'POST', body: { event, props, sessionId: this.sessionId }, retries: 0 });
 	}
 
 	dispose() { this.stopPresence(); }
