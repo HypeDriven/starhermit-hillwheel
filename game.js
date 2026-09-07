@@ -4,7 +4,7 @@
 
 import * as rules from './rules.js';
 import * as content from './content.js';
-import { createSession, verifyReplay } from './session.js';
+import { createSession } from './session.js';
 import { createRender } from './render.js';
 import { createUi, loadSettings, saveSettings, loadProgress, saveProgress, STRINGS } from './ui.js';
 import { createAudio } from './audio.js';
@@ -40,6 +40,7 @@ export class Game {
 		this.totalDistance = this.progress.totalDistance || 0;
 		this._raf = null;
 		this._undoTimer = 0;
+		this._countdownToken = 0;
 
 		this.platform = createPlatform(env.platform || {});
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
@@ -187,7 +188,11 @@ export class Game {
 		this._countdown(3);
 	}
 
-	_countdown(n) {
+	// token guards against a stale countdown chain from a previous level
+	// (restart/quit during the count) resuming the new one early.
+	_countdown(n, token) {
+		if (token === undefined) token = ++this._countdownToken;
+		else if (token !== this._countdownToken) return;
 		this._setPhase('countdown', 'count_' + n);
 		if (n <= 0) {
 			this.ui.showCountdown('');
@@ -199,7 +204,7 @@ export class Game {
 		}
 		this.ui.showCountdown(n === 3 ? (this.levelMeta.intro || String(n)) : String(n));
 		this.audio.event('countdown');
-		setTimeout(() => { if (this.phase === 'countdown') this._countdown(n - 1); }, this.levelMeta.intro && n === 3 ? 1600 : 900);
+		setTimeout(() => { if (this.phase === 'countdown') this._countdown(n - 1, token); }, this.levelMeta.intro && n === 3 ? 1600 : 900);
 	}
 
 	_startJourneyLevel(i) {
@@ -253,7 +258,7 @@ export class Game {
 		this.audio.stopMusic();
 		this.session?.close();
 		this.session = null;
-		this.render.unloadLevel();
+		this.render?.unloadLevel();
 		this._showTitle();
 	}
 
@@ -293,6 +298,7 @@ export class Game {
 
 	_updateSettings(patch) {
 		Object.assign(this.settings, patch);
+		saveSettings(this.settings);
 		this.ui.applySettings(this.settings);
 		this.audio.setMuted(!!this.settings.muted);
 		for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this.settings.volumes[bus]);
@@ -349,10 +355,17 @@ export class Game {
 			ArrowLeft: 'tiltL', KeyA: 'tiltL',
 			ArrowRight: 'tiltR', KeyD: 'tiltR',
 		};
+		// Driving keys are only captured while a run is on screen, and never while a
+		// form control has focus, so arrow keys keep working in the settings sliders,
+		// the quality select and for scrolling menus.
+		const isFormControl = (t) => !!t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' ||
+			t.tagName === 'TEXTAREA' || t.isContentEditable);
+		const driving = () => this.phase === 'active' || this.phase === 'countdown' || this.phase === 'paused';
 		window.addEventListener('keydown', (e) => {
 			if (e.repeat) return;
 			const k = map[e.code];
 			if (k) {
+				if (!driving() || isFormControl(e.target)) return;
 				this.keys[k] = true;
 				this.audio.ensureContext();
 				this.audio.event('input');
@@ -369,7 +382,8 @@ export class Game {
 		});
 		window.addEventListener('keyup', (e) => {
 			const k = map[e.code];
-			if (k) { this.keys[k] = false; this._syncInput(); e.preventDefault(); }
+			// Always clear the held state (a key released after focus moved must not stick).
+			if (k) { this.keys[k] = false; this._syncInput(); if (driving() && !isFormControl(e.target)) e.preventDefault(); }
 		});
 		// Gamepad: standard mapping — RT throttle, LT brake, left stick tilt, start pause.
 		this._gamepadPrev = {};
@@ -499,8 +513,12 @@ export class Game {
 			this.progress.stagesCompleted[m.id] = Math.max(prev, result.breakdown.total);
 			this.progress.lastStage = Math.min(m.index + 1, content.STAGES.length - 1);
 		}
-		if (m?.kind === 'learn' && this.session.state.vehicle.x >= (content.TUTORIALS[m.index].requires.minX || 0)) {
-			if (!this.progress.tutorialDone.includes(m.id)) this.progress.tutorialDone.push(m.id);
+		if (m?.kind === 'learn') {
+			// A lesson counts as learned only when every requirement it states was met.
+			const req = content.TUTORIALS[m.index].requires || {};
+			const met = this.session.state.vehicle.x >= (req.minX || 0) &&
+				this.session.state.cansCollected >= (req.cans || 0);
+			if (met && !this.progress.tutorialDone.includes(m.id)) this.progress.tutorialDone.push(m.id);
 		}
 
 		// Achievements (idempotent).

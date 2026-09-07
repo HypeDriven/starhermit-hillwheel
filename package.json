@@ -1,4 +1,8 @@
 {
+  "private": true,
+  "scripts": {
+    "test:e2e": "node tests/e2e.mjs"
+  },
   "dependencies": {
     "esbuild": "^0.28.1",
     "playwright": "^1.59.0",

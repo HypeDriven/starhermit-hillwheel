@@ -70,7 +70,7 @@ function rateLimited(ip, cost = 1, capacity = 120, refillPerSec = 10) {
 
 const MIME = {
 	'.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-	'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
+	'.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
 	'.json': 'application/json', '.txt': 'text/plain; charset=utf-8',
 	'.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 	'.opus': 'audio/ogg',
@@ -109,17 +109,20 @@ function playerId(req, body) {
 // --- static files ---------------------------------------------------------------------
 
 function serveStatic(req, res, urlPath) {
-	let rel = decodeURIComponent(urlPath.split('?')[0]);
+	let rel;
+	try { rel = decodeURIComponent(urlPath.split('?')[0]); }
+	catch { return sendError(res, 400, 'bad_path'); } // malformed percent-encoding
 	if (rel === '/') rel = '/index.html';
 	const file = path.normalize(path.join(ROOT, rel));
-	if (!file.startsWith(ROOT) || file.includes('node_modules') || file.startsWith(DATA_DIR) ||
+	// The separator keeps a sibling directory (e.g. <root>-secret) outside the root.
+	if (!(file === ROOT || file.startsWith(ROOT + path.sep)) || file.includes('node_modules') || file.startsWith(DATA_DIR) ||
 		path.basename(file).startsWith('.') || file.endsWith('.md') || file === __filename) {
 		return sendError(res, 404, 'not_found');
 	}
 	fs.readFile(file, (err, data) => {
 		if (err) return sendError(res, 404, 'not_found');
 		const ext = path.extname(file).toLowerCase();
-		const immutable = ext === '.js' || ext === '.js' || ext === '.css';
+		const immutable = ext === '.js' || ext === '.mjs' || ext === '.css';
 		res.writeHead(200, {
 			'Content-Type': MIME[ext] || 'application/octet-stream',
 			'Cache-Control': immutable ? 'public, max-age=3600' : 'no-cache',
@@ -239,8 +242,9 @@ async function handleApi(req, res, urlPath, query) {
 		if (typeof key !== 'string' || !/^[a-z0-9_]{3,40}$/.test(key)) return sendError(res, 422, 'bad_key');
 		const pid = playerId(req, body);
 		const owned = db.achievements[pid] || (db.achievements[pid] = []);
-		if (!owned.includes(key)) { owned.push(key); storeJSON('achievements.json', db.achievements); }
-		return send(res, 200, { unlocked: true, duplicate: owned.includes(key) });
+		const duplicate = owned.includes(key);
+		if (!duplicate) { owned.push(key); storeJSON('achievements.json', db.achievements); }
+		return send(res, 200, { unlocked: true, duplicate });
 	}
 
 	if (urlPath === '/api/v1/achievements' && req.method === 'GET') {

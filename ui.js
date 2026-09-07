@@ -73,13 +73,14 @@ export function createUi(root, onAction, settings) {
 
 	const canvasWrap = el('div', 'hw-canvas-wrap');
 	const canvas = document.createElement('canvas');
+	canvas.id = 'hw-canvas';
 	canvas.setAttribute('aria-label', 'Hillwheel 3D scene');
 	canvasWrap.appendChild(canvas);
 
 	const hud = el('div', 'hw-hud hidden');
 	const screenLayer = el('div', 'hw-screen-layer');
 	const countdownEl = el('div', 'hw-countdown hidden');
-	const liveRegion = el('div', 'sr-only');
+	const liveRegion = el('div', 'hw-live sr-only');
 	liveRegion.setAttribute('aria-live', 'polite');
 
 	root.append(canvasWrap, hud, screenLayer, countdownEl, liveRegion);
@@ -136,6 +137,7 @@ export function createUi(root, onAction, settings) {
 
 	function buildTitle({ dailyInfo, journeyProgress } = {}) {
 		const p = panel(STRINGS.title, STRINGS.tagline);
+		p.querySelector('h1').classList.add('hw-title');
 		const col = el('div', 'hw-btn-col');
 		col.appendChild(button('Quick play' + (journeyProgress ? ` (${journeyProgress})` : ''), 'hw-btn-primary', () => onAction('quick-play')));
 		for (const [mode, label] of [
@@ -198,17 +200,25 @@ export function createUi(root, onAction, settings) {
 		for (const bus of ['music', 'sfx', 'ambience', 'voice']) {
 			wrap.appendChild(mkRange(bus[0].toUpperCase() + bus.slice(1), s.volumes?.[bus], (v) => onSettings({ volumes: { ...s.volumes, [bus]: v } })));
 		}
-		const tierField = el('label', 'hw-field');
-		tierField.appendChild(el('span', null, 'Quality'));
-		const tier = document.createElement('select');
-		for (const t of ['low', 'medium', 'high']) {
-			const o = document.createElement('option');
-			o.value = t; o.textContent = t; o.selected = s.tier === t;
-			tier.appendChild(o);
-		}
-		tier.addEventListener('change', () => onSettings({ tier: tier.value }));
-		tierField.appendChild(tier);
-		wrap.appendChild(tierField);
+		const mkSelect = (label, options, value, onChange) => {
+			const f = el('label', 'hw-field');
+			f.appendChild(el('span', null, label));
+			const sel = document.createElement('select');
+			for (const [v, text] of options) {
+				const o = document.createElement('option');
+				o.value = v; o.textContent = text; o.selected = value === v;
+				sel.appendChild(o);
+			}
+			sel.addEventListener('change', () => onChange(sel.value));
+			f.appendChild(sel);
+			return f;
+		};
+		wrap.appendChild(mkSelect('Quality', [['low', 'low'], ['medium', 'medium'], ['high', 'high']],
+			s.tier, (v) => onSettings({ tier: v })));
+		wrap.appendChild(mkSelect('Colour palette', [
+			['default', 'Default'], ['deuteranopia', 'Deuteranopia'],
+			['protanopia', 'Protanopia'], ['tritanopia', 'Tritanopia'],
+		], s.palette || 'default', (v) => onSettings({ palette: v })));
 		wrap.appendChild(mkCheck('Reduced motion', s.reducedMotion, (v) => onSettings({ reducedMotion: v })));
 		wrap.appendChild(mkCheck('Left-handed pedals', s.leftHanded, (v) => onSettings({ leftHanded: v })));
 		wrap.appendChild(mkCheck('Hold to drive (off = toggle)', s.holdToDrive !== false, (v) => onSettings({ holdToDrive: v })));
@@ -331,6 +341,7 @@ export function createUi(root, onAction, settings) {
 		const mkPedal = (key, label) => {
 			const b = el('button', 'hw-pedal', label);
 			b.type = 'button';
+			b.id = 'hw-pedal-' + key;
 			const down = (e) => { e.preventDefault(); b.classList.add('active'); onPedal && onPedal(key, true); };
 			const up = () => { b.classList.remove('active'); onPedal && onPedal(key, false); };
 			b.addEventListener('pointerdown', down);

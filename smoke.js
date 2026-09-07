@@ -71,13 +71,13 @@ try {
 	await page.keyboard.press('Escape');
 	await page.waitForSelector('.hw-panel', { timeout: 3000 });
 	check('pause opens', (await page.evaluate(() => window.__hillwheel.phase)) === 'paused');
-	await page.click('text=Resume');
+	await page.click('.hw-panel button:has-text("Resume")');
 	await page.waitForFunction(() => window.__hillwheel.phase === 'active', null, { timeout: 3000 });
 	check('resume works', true);
 
 	// Pause -> quit to title.
 	await page.keyboard.press('KeyP');
-	await page.click('text=Quit to Title');
+	await page.click('.hw-panel button:has-text("Quit to title")');
 	await page.waitForSelector('.hw-title', { timeout: 3000 });
 	check('quit to title', true);
 
@@ -91,20 +91,20 @@ try {
 	check('keyboard focus works', focusVisible);
 
 	// Settings screen opens and persists.
-	await page.click('text=Settings');
+	await page.click('.hw-panel button:has-text("Settings")');
 	await page.waitForSelector('.hw-settings', { timeout: 3000 });
-	await page.click('text=Back');
+	await page.click('.hw-panel button:has-text("Back")');
 	await page.waitForSelector('.hw-title', { timeout: 3000 });
 	check('settings screen round-trips', true);
 
 	// Help screen.
-	await page.click('text=How to Play');
+	await page.click('.hw-panel button:has-text("How to play")');
 	await page.waitForSelector('.hw-help-grid', { timeout: 3000 });
 	check('help screen renders rule cards', true);
-	await page.click('text=Back');
+	await page.click('.hw-panel button:has-text("Back")');
 
 	// Daily flow via server-backed mode select.
-	await page.click('text=Daily Challenge');
+	await page.click('.hw-panel button:has-text("Daily")');
 	await page.waitForSelector('.hw-level-list', { timeout: 5000 });
 	check('daily setup lists ranked run', true);
 
