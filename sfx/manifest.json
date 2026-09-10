@@ -76,5 +76,29 @@
     "seconds": 1,
     "prompt": "A short punchy air-horn style start signal, single bright honk, energetic but small, like a toy race starter horn.",
     "event": "go"
+  },
+  {
+    "name": "engine-sputter",
+    "seconds": 2,
+    "prompt": "A small petrol engine coughing and dying as the tank runs dry, two weak sputters then silence, dusty and mechanical, no music.",
+    "event": "dry"
+  },
+  {
+    "name": "takeoff-whoosh",
+    "seconds": 1,
+    "prompt": "A short airy whoosh of a light vehicle launching off a dirt crest, rushing wind with a faint suspension rebound creak, quick and dry.",
+    "event": "airborne"
+  },
+  {
+    "name": "achievement-unlock",
+    "seconds": 2,
+    "prompt": "A warm three-note ascending chime on a small glockenspiel with a soft shimmer tail, rewarding and gentle, clean ending.",
+    "event": "achievement"
+  },
+  {
+    "name": "wind-ambience",
+    "seconds": 6,
+    "prompt": "A steady quiet outdoor ambience of gentle breeze over open grassy hills with distant birdsong, no music, no impacts, even level throughout for seamless looping.",
+    "event": "ambience"
   }
 ]

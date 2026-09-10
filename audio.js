@@ -22,7 +22,13 @@ const EVENT_SAMPLES = {
 	click: ['ui-click'],
 	countdown: ['countdown-beep'],
 	go: ['go-horn'],
+	dry: ['engine-sputter'],
+	airborne: ['takeoff-whoosh'],
+	achievement: ['achievement-unlock'],
 };
+
+// Looping bed played on the ambience bus for the length of a run.
+const AMBIENCE_CLIP = 'wind-ambience';
 
 export class AudioModule {
 	constructor(settings = {}) {
@@ -33,6 +39,8 @@ export class AudioModule {
 		this.muted = false;
 		this._engine = null;
 		this._music = null;
+		this._ambience = null;
+		this._wantAmbience = false;
 		this._started = false;
 		this._variantSeed = 1;
 		this._sampleBuffers = new Map(); // clip name -> decoded AudioBuffer
@@ -142,6 +150,9 @@ export class AudioModule {
 			case 'click': this._blip('sfx', { freq: 600, dur: 0.04, gain: 0.1, type: 'square' }); break;
 			case 'countdown': this._blip('sfx', { freq: 440, dur: 0.1, gain: 0.2 }); break;
 			case 'go': this._blip('sfx', { freq: 880, dur: 0.2, gain: 0.25 }); break;
+			case 'dry': this._blip('sfx', { freq: 150, dur: 0.35, gain: 0.2, type: 'sawtooth', slide: -70 }); this._noise('sfx', { dur: 0.25, gain: 0.12, freq: 400 }); break;
+			case 'airborne': this._noise('sfx', { dur: 0.25, gain: 0.14, freq: 1600 }); break;
+			case 'achievement': [659, 784, 1047].forEach((f, i) => setTimeout(() => this._blip('sfx', { freq: f, dur: 0.3, gain: 0.2, type: 'triangle' }), i * 110)); break;
 		}
 	}
 
@@ -182,14 +193,51 @@ export class AudioModule {
 	}
 	stopMusic() { if (this._music) { clearInterval(this._music); this._music = null; } }
 
+	// Looping wind bed on the ambience bus. The clip is fetched through the same
+	// cache as the one-shots; if it is missing or still loading the run is simply
+	// silent on that bus (no synthesised substitute, nothing gameplay depends on it).
+	startAmbience() {
+		if (!this.ctx || this._ambience) return;
+		const buf = this._sampleBuffers.get(AMBIENCE_CLIP);
+		if (!buf) {
+			if (!this._sampleLoads.has(AMBIENCE_CLIP)) {
+				this._sampleLoads.set(AMBIENCE_CLIP,
+					fetch(`sfx/${AMBIENCE_CLIP}.opus`)
+						.then((r) => { if (!r.ok) throw new Error('sfx_missing'); return r.arrayBuffer(); })
+						.then((ab) => this.ctx.decodeAudioData(ab))
+						.then((decoded) => { this._sampleBuffers.set(AMBIENCE_CLIP, decoded); this._wantAmbience && this.startAmbience(); })
+						.catch(() => {})
+				);
+			}
+			this._wantAmbience = true;
+			return;
+		}
+		this._wantAmbience = true;
+		const src = this.ctx.createBufferSource();
+		src.buffer = buf;
+		src.loop = true;
+		const g = this.ctx.createGain();
+		g.gain.value = 0.6;
+		src.connect(g); g.connect(this.buses.ambience || this.master);
+		src.start();
+		this._ambience = { src, g };
+	}
+	stopAmbience() {
+		this._wantAmbience = false;
+		if (!this._ambience) return;
+		try { this._ambience.src.stop(); } catch {}
+		this._ambience = null;
+	}
+
 	// Background tabs: silence everything but keep nodes for fast resume.
 	setBackgrounded(bg) {
 		if (!this.ctx) return;
-		if (bg) { this.setEngine(false); } else { this.ctx.resume(); }
+		if (bg) { this.setEngine(false); this.stopAmbience(); } else { this.ctx.resume(); }
 	}
 
 	dispose() {
 		this.stopMusic();
+		this.stopAmbience();
 		this.setEngine(false);
 		if (this.ctx) { this.ctx.close().catch(() => {}); this.ctx = null; }
 	}

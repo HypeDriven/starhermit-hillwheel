@@ -3,9 +3,35 @@
 
 export const STRINGS = {
 	title: 'Hillwheel',
-	tagline: 'Balance the wheel over the hills. Reach the flag with fuel to spare.',
+	tagline: 'Hold the gas to climb, tilt in the air, land on both wheels. Reach the green flag before the fuel runs out.',
 	next: 'Next stage',
+	nextLesson: 'Next lesson',
+	startJourney: 'Start the Journey',
 	back: '← Back',
+};
+
+// Plain-language explanations of how a run ended, with the one thing to try next.
+export const END_REASONS = {
+	crashed: { title: 'Crashed', text: 'You landed nose-first or too hard. In the air, tilt to match the slope you are about to land on.' },
+	out_of_fuel: { title: 'Out of fuel', text: 'The tank ran dry. Ease off the gas on descents and grab the yellow fuel cans.' },
+	timeout: { title: 'Out of time', text: 'The clock ran out before the flag. Keep the gas down on the flats.' },
+	abandoned: { title: 'Run abandoned', text: null },
+};
+
+export const MODE_DESCRIPTIONS = {
+	journey: '40 stages, easy to wild. Your progress is saved.',
+	learn: 'Five short lessons, one control at a time.',
+	daily: 'One shared course per day. Ranked.',
+	practice: 'Pick a hill type. Undo is allowed.',
+	challenge: 'Special rules: fuel-starved, timed, cliffs, marathon.',
+};
+
+// Human labels for each pedal, plus keyboard hints shown on non-touch devices.
+export const PEDAL_LABELS = {
+	throttle: { label: 'GAS', keys: '↑ / W' },
+	brake: { label: 'BRAKE', keys: '↓ / S' },
+	tiltL: { label: '◀ TILT', keys: '← / A' },
+	tiltR: { label: 'TILT ▶', keys: '→ / D' },
 };
 
 const SETTINGS_KEY = 'hillwheel-settings-v1';
@@ -30,6 +56,7 @@ const DEFAULT_PROGRESS = {
 	achievements: [],
 	lastStage: 0,
 	totalDistance: 0,
+	runsPlayed: 0,
 };
 
 function readJson(key, fallback) {
@@ -89,14 +116,16 @@ export function createUi(root, onAction, settings) {
 		canvas, canvasWrap, screenLayer, hud,
 		showScreen, buildTitle, buildModeSetup, buildSettings, buildHelp,
 		buildPause, buildLeaderboard, buildResults,
-		buildHud, showHud, updateHud, updateMirror,
+		buildHud, showHud, updateHud, updateMirror, showHint, highlightPedal,
 		showCountdown, announce, applySettings,
 	};
 
 	let pedalHandlers = null;
 
-	function showScreen(_name, node) {
+	function showScreen(name, node) {
 		screenLayer.innerHTML = '';
+		// The title screen is the only one that shows the key art behind the panel.
+		screenLayer.dataset.screen = name || '';
 		if (node) screenLayer.appendChild(node);
 		screenLayer.classList.toggle('hidden', !node);
 		hud.classList.add('hidden');
@@ -114,8 +143,10 @@ export function createUi(root, onAction, settings) {
 		setTimeout(() => { liveRegion.textContent = text; }, 30);
 	}
 
-	function showCountdown(text) {
-		countdownEl.textContent = text || '';
+	function showCountdown(text, hint) {
+		countdownEl.innerHTML = '';
+		if (text) countdownEl.appendChild(el('div', 'hw-countdown-main' + (text.length > 3 ? ' hw-countdown-long' : ''), text));
+		if (text && hint) countdownEl.appendChild(el('div', 'hw-countdown-hint', hint));
 		countdownEl.classList.toggle('hidden', !text);
 	}
 
@@ -135,11 +166,23 @@ export function createUi(root, onAction, settings) {
 
 	// --- Screens -------------------------------------------------------------
 
-	function buildTitle({ dailyInfo, journeyProgress } = {}) {
+	function modeButton(label, desc, onClick) {
+		const b = button('', 'hw-btn-mode', onClick);
+		b.appendChild(el('span', 'hw-mode-label', label));
+		if (desc) b.appendChild(el('span', 'hw-mode-desc', desc));
+		return b;
+	}
+
+	function buildTitle({ dailyInfo, journeyProgress, firstRun, resumeLabel, touch } = {}) {
 		const p = panel(STRINGS.title, STRINGS.tagline);
 		p.querySelector('h1').classList.add('hw-title');
 		const col = el('div', 'hw-btn-col');
-		col.appendChild(button('Quick play' + (journeyProgress ? ` (${journeyProgress})` : ''), 'hw-btn-primary', () => onAction('quick-play')));
+		const primary = button(firstRun ? 'Quick play — learn the basics' : `Quick play — ${resumeLabel || 'continue'}`, 'hw-btn-primary', () => onAction('quick-play'));
+		col.appendChild(primary);
+		const sub = el('p', 'hw-note hw-primary-note', firstRun
+			? 'Your first run is a two-minute lesson. Skip it any time from Journey below.'
+			: `Journey: ${journeyProgress || ''}`);
+		col.appendChild(sub);
 		for (const [mode, label] of [
 			['journey', 'Journey'],
 			['learn', 'Learn'],
@@ -147,9 +190,12 @@ export function createUi(root, onAction, settings) {
 			['practice', 'Practice'],
 			['challenge', 'Challenge'],
 		]) {
-			col.appendChild(button(label, null, () => onAction('mode', mode)));
+			col.appendChild(modeButton(label, MODE_DESCRIPTIONS[mode], () => onAction('mode', mode)));
 		}
 		p.appendChild(col);
+		p.appendChild(el('p', 'hw-controls-strip', touch
+			? 'Controls: on-screen pedals — GAS, BRAKE, and TILT ◀ ▶ for the air.'
+			: 'Controls: ↑ gas · ↓ brake · ← → tilt in the air · Esc pause'));
 		const row = el('div', 'hw-btn-row');
 		row.appendChild(button('Leaderboards', 'hw-btn-small', () => onAction('leaderboard')));
 		row.appendChild(button('Settings', 'hw-btn-small', () => onAction('settings')));
@@ -239,9 +285,11 @@ export function createUi(root, onAction, settings) {
 		const p = panel('How to play');
 		const grid = el('div', 'hw-help-grid');
 		for (const [h, t] of [
-			['Drive', 'Hold ↑ / W or the GAS pedal to accelerate. ↓ / S or BRAKE slows down.'],
-			['Balance', '← / A tilts back, → / D tilts forward. Land on both wheels for a smooth-landing bonus.'],
-			['Goal', 'Reach the flag before the fuel runs out. Checkpoints and fuel cans boost your score.'],
+			['Drive', 'Hold ↑ / W or the GAS pedal to accelerate. ↓ / S or BRAKE slows you down. Coast downhill to save fuel.'],
+			['Balance', 'Only works in the air: ← / A tilts the nose up, → / D tilts it down. Match the slope you are landing on.'],
+			['Crashing', 'Landing nose-first, on the roof, or too hard ends the run. Land on both wheels for a smooth-landing bonus.'],
+			['Goal', 'Reach the green flag before the fuel runs out. Yellow flags are checkpoints; yellow cans refill fuel.'],
+			['Score', 'Distance, checkpoints, smooth landings, cans, leftover fuel and time all add up.'],
 			['Pause', 'Esc or P pauses. Practice mode allows undo with U.'],
 		]) {
 			const c = el('div', 'hw-help-card');
@@ -285,8 +333,9 @@ export function createUi(root, onAction, settings) {
 		return p;
 	}
 
-	function buildResults({ result, breakdown, won, isDaily, newAchievements, nextLabel } = {}) {
+	function buildResults({ result, breakdown, won, isDaily, newAchievements, nextLabel, stageName } = {}) {
 		const p = panel(won ? 'Finished!' : 'Run over', isDaily ? 'Daily challenge — ranked' : null);
+		if (won && stageName) p.appendChild(el('p', 'hw-note', stageName + ' complete'));
 		const table = el('dl', 'hw-score-table');
 		const rows = [
 			['Distance', breakdown?.distance],
@@ -309,11 +358,15 @@ export function createUi(root, onAction, settings) {
 			p.appendChild(el('p', 'hw-achievements', 'Achievements: ' + newAchievements.join(', ')));
 		}
 		if (!won && result?.terminalReason) {
-			p.appendChild(el('p', 'hw-note', 'Reason: ' + String(result.terminalReason).replace(/_/g, ' ')));
+			const r = END_REASONS[result.terminalReason];
+			const box = el('div', 'hw-end-reason');
+			box.appendChild(el('strong', null, r ? r.title : String(result.terminalReason).replace(/_/g, ' ')));
+			if (r?.text) box.appendChild(el('p', null, r.text));
+			p.appendChild(box);
 		}
 		const row = el('div', 'hw-btn-row');
 		if (nextLabel) row.appendChild(button(nextLabel, 'hw-btn-primary', () => onAction('next')));
-		row.appendChild(button('Restart', null, () => onAction('restart')));
+		row.appendChild(button(won ? 'Restart' : 'Try again', nextLabel ? null : 'hw-btn-primary', () => onAction('restart')));
 		row.appendChild(button('Quit to title', 'hw-danger', () => onAction('quit')));
 		p.appendChild(row);
 		return p;
@@ -323,25 +376,54 @@ export function createUi(root, onAction, settings) {
 
 	let hudEls = null;
 
-	function buildHud({ leftHanded, onPedal, onPause } = {}) {
+	function buildHud({ leftHanded, onPedal, onPause, showKeys, checkpoints = [], goalX = 1 } = {}) {
 		pedalHandlers = onPedal;
 		hud.innerHTML = '';
 		const top = el('div', 'hw-hud-top');
 		const pauseBtn = button('❚❚', 'hw-btn-icon hw-btn-small', () => onPause && onPause());
 		pauseBtn.setAttribute('aria-label', 'Pause');
-		const objective = el('div', 'hw-hud-objective', '');
-		const mirror = el('div', 'hw-note', '');
+
+		// Course progress: a track from start to the green flag with checkpoint ticks.
+		const objective = el('div', 'hw-hud-objective');
+		const objText = el('div', 'hw-hud-objective-text', '');
+		const track = el('div', 'hw-hud-track');
+		for (const cx of checkpoints) {
+			const tick = el('div', 'hw-hud-tick');
+			tick.style.left = (100 * cx / goalX) + '%';
+			track.appendChild(tick);
+		}
+		const goalTick = el('div', 'hw-hud-tick hw-hud-tick-goal');
+		goalTick.style.left = '100%';
+		const marker = el('div', 'hw-hud-marker');
+		track.append(goalTick, marker);
+		objective.append(objText, track);
+
+		const mirror = el('div', 'hw-note hw-hud-mirror', '');
+		const fuelWrap = el('div', 'hw-hud-fuel-wrap');
+		fuelWrap.appendChild(el('span', 'hw-hud-label', 'FUEL'));
 		const fuel = el('div', 'hw-hud-fuel');
+		fuel.setAttribute('role', 'progressbar');
+		fuel.setAttribute('aria-label', 'Fuel');
 		const fuelBar = el('div', 'hw-hud-fuel-bar');
 		fuel.appendChild(fuelBar);
+		fuelWrap.appendChild(fuel);
+		const scoreWrap = el('div', 'hw-hud-score-wrap');
+		scoreWrap.appendChild(el('span', 'hw-hud-label', 'SCORE'));
 		const score = el('div', 'hw-hud-score', '0');
-		top.append(pauseBtn, objective, mirror, fuel, score);
+		scoreWrap.appendChild(score);
+		top.append(pauseBtn, objective, mirror, fuelWrap, scoreWrap);
+
+		// Coaching banner: one short line telling the player the next useful action.
+		const hint = el('div', 'hw-hud-hint hidden');
 
 		const tray = el('div', 'hw-hud-tray');
-		const mkPedal = (key, label) => {
-			const b = el('button', 'hw-pedal', label);
+		const mkPedal = (key) => {
+			const b = el('button', 'hw-pedal');
 			b.type = 'button';
 			b.id = 'hw-pedal-' + key;
+			b.appendChild(el('span', 'hw-pedal-label', PEDAL_LABELS[key].label));
+			if (showKeys) b.appendChild(el('span', 'hw-pedal-keys', PEDAL_LABELS[key].keys));
+			b.setAttribute('aria-label', PEDAL_LABELS[key].label.replace(/[◀▶] ?/g, '').trim());
 			const down = (e) => { e.preventDefault(); b.classList.add('active'); onPedal && onPedal(key, true); };
 			const up = () => { b.classList.remove('active'); onPedal && onPedal(key, false); };
 			b.addEventListener('pointerdown', down);
@@ -351,8 +433,9 @@ export function createUi(root, onAction, settings) {
 			b.addEventListener('contextmenu', (e) => e.preventDefault());
 			return b;
 		};
-		const left = [mkPedal('tiltL', '◀ TILT'), mkPedal('brake', 'BRAKE')];
-		const right = [mkPedal('throttle', 'GAS'), mkPedal('tiltR', 'TILT ▶')];
+		const pedals = { tiltL: mkPedal('tiltL'), brake: mkPedal('brake'), throttle: mkPedal('throttle'), tiltR: mkPedal('tiltR') };
+		const left = [pedals.tiltL, pedals.brake];
+		const right = [pedals.throttle, pedals.tiltR];
 		const order = leftHanded ? [...right, ...left] : [...left, ...right];
 		const leftGroup = el('div', 'hw-btn-row');
 		const rightGroup = el('div', 'hw-btn-row');
@@ -361,14 +444,32 @@ export function createUi(root, onAction, settings) {
 		order.slice(2).forEach((b) => rightGroup.appendChild(b));
 		tray.append(leftGroup, rightGroup);
 
-		hud.append(top, tray);
-		hudEls = { objective, mirror, fuelBar, score };
+		hud.append(top, hint, tray);
+		hudEls = { objText, marker, mirror, fuelBar, score, hint, pedals, hintTimer: 0, lastObj: '' };
+	}
+
+	// Show a coaching line in the HUD. `ms` auto-hides it; 0 keeps it until replaced or cleared.
+	function showHint(text, ms = 0) {
+		if (!hudEls) return;
+		clearTimeout(hudEls.hintTimer);
+		hudEls.hint.textContent = text || '';
+		hudEls.hint.classList.toggle('hidden', !text);
+		if (text && ms > 0) hudEls.hintTimer = setTimeout(() => showHint(null), ms);
+	}
+
+	// Pulse one pedal so a lesson can point at the control it teaches.
+	function highlightPedal(key) {
+		if (!hudEls) return;
+		for (const k of Object.keys(hudEls.pedals)) hudEls.pedals[k].classList.toggle('hint', k === key);
 	}
 
 	function updateHud(state, breakdown, goalX) {
 		if (!hudEls) return;
 		const x = Math.max(0, Math.floor(state.vehicle.x));
-		hudEls.objective.textContent = `${x} / ${Math.floor(goalX)} m · checkpoint ${state.nextCheckpoint}/${state.checkpoints.length}`;
+		const left = Math.max(0, Math.ceil(goalX - x));
+		const obj = `${left} m to the flag · ⚑ ${state.nextCheckpoint}/${state.checkpoints.length}`;
+		if (obj !== hudEls.lastObj) { hudEls.objText.textContent = obj; hudEls.lastObj = obj; }
+		hudEls.marker.style.left = Math.min(100, 100 * x / goalX) + '%';
 		hudEls.score.textContent = String(breakdown?.total ?? 0);
 		const pct = Math.max(0, Math.min(100, (state.vehicle.fuel / (state.vehicle.fuelMax || 100)) * 100));
 		hudEls.fuelBar.style.width = pct + '%';

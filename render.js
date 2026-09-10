@@ -95,14 +95,16 @@ export class RenderModule {
 		const length = state.goalX;
 		const stepLen = this.q.terrainStep;
 
-		// Terrain strip: single BufferGeometry, vertex colors near/far.
-		const count = Math.ceil(length / stepLen) + 1;
+		// Terrain strip: single BufferGeometry, vertex colors near/far. It starts well
+		// behind the spawn so the vehicle never sits on a cliff edge at the start line.
+		const startX = -60;
+		const count = Math.ceil((length - startX) / stepLen) + 1;
 		const pos = new Float32Array(count * 2 * 3);
 		const col = new Float32Array(count * 2 * 3);
 		const cNear = new THREE.Color(theme.ground), cFar = new THREE.Color(theme.groundFar);
 		const depth = 26;
 		for (let i = 0; i < count; i++) {
-			const x = Math.min(length, i * stepLen);
+			const x = Math.min(length, startX + i * stepLen);
 			const y = terrain.height(x);
 			const j = i * 6;
 			pos[j] = x; pos[j + 1] = y; pos[j + 2] = 0;

@@ -7,7 +7,7 @@ export const BOOTSTRAP_SCHEMA_VERSION = 2;
 // Asset manifest: everything loads locally; core rules/UI first, scenic lazily.
 export const ASSET_MANIFEST = {
 	core: ['./three.module.min.js', './three.core.min.js', './style.css'],
-	scenic: [], // scenic assets are procedural; nothing external to fetch
+	scenic: ['./assets/keyart.webp'], // title key art; everything else in the scene is procedural
 };
 
 export function detectCapabilities() {

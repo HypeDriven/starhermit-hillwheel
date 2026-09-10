@@ -23,31 +23,31 @@ export const THEMES = [
 export const TUTORIALS = [
 	{
 		id: 'tut-throttle', order: 0, title: 'Give it throttle',
-		text: 'Hold THROTTLE (Up arrow / W, or the right pedal) to build speed. Reach the flag.',
+		text: 'Hold GAS (↑ / W) to build speed. Reach the green flag.',
 		requires: { minX: 60 }, hint: 'throttle',
 		config: { length: 120, roughness: 0.3, fuel: 100, checkpoints: 1, fuelCans: 0 },
 	},
 	{
 		id: 'tut-brake', order: 1, title: 'Brake before the drop',
-		text: 'Hold BRAKE (Down arrow / S, or the left pedal) to slow down. Cross the flag under control.',
+		text: 'Hold BRAKE (↓ / S) to slow down before the drop. Cross the flag under control.',
 		requires: { minX: 100 }, hint: 'brake',
 		config: { length: 140, roughness: 0.5, fuel: 100, checkpoints: 1, fuelCans: 0 },
 	},
 	{
 		id: 'tut-pitch', order: 2, title: 'Mind your pitch',
-		text: 'In the air, tilt (Left/Right arrows / A,D) to match the slope before you land.',
+		text: 'In the air, TILT (← / →) so your wheels match the slope before you land.',
 		requires: { minX: 140 }, hint: 'tilt',
 		config: { length: 180, roughness: 0.9, fuel: 120, checkpoints: 1, fuelCans: 0 },
 	},
 	{
 		id: 'tut-fuel', order: 3, title: 'Fuel is finite',
-		text: 'Coast downhill and collect fuel cans. Run dry and the run ends.',
+		text: 'Gas burns fuel. Coast downhill and collect the yellow cans, or the run ends dry.',
 		requires: { minX: 160, cans: 1 }, hint: 'fuel',
 		config: { length: 220, roughness: 0.7, fuel: 55, checkpoints: 1, fuelCans: 3 },
 	},
 	{
 		id: 'tut-mastery', order: 4, title: 'Put it together',
-		text: 'Throttle, brake, pitch, fuel. Reach the last flag to finish your training.',
+		text: 'Gas, brake, tilt, fuel. Reach the last flag to finish your training.',
 		requires: { minX: 260 }, hint: null,
 		config: { length: 320, roughness: 1.0, fuel: 90, checkpoints: 2, fuelCans: 2 },
 	},

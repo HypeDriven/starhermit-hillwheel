@@ -41,13 +41,18 @@ export class Game {
 		this._raf = null;
 		this._undoTimer = 0;
 		this._countdownToken = 0;
+		this.coach = null; // per-run coaching state (see _coach)
+		// Pure-touch devices (no hover, coarse pointer) get pedal-only wording; everything
+		// else also gets keyboard hints, since a touch laptop still has keys.
+		const caps = env.capabilities || {};
+		this.touchOnly = !!caps.touch && !!(window.matchMedia?.('(hover: none) and (pointer: coarse)').matches);
 
 		this.platform = createPlatform(env.platform || {});
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
 		if (env.launchToken) this.platform.setLaunchToken(env.launchToken);
 
 		this.ui = createUi(root, (a, p) => this._onAction(a, p), this.settings);
-		this.audio = createAudio({ volumes: this.settings.volumes });
+		this.audio = createAudio({ volumes: this._busVolumes() });
 		this.render = null; // created lazily when WebGL confirmed
 		this._bindGlobalInput();
 		this._bindLifecycle();
@@ -90,12 +95,22 @@ export class Game {
 		this._setPhase('title', 'no_webgl');
 	}
 
+	// A player who has never finished a lesson or a stage is sent to the first
+	// lesson by Quick play; everyone else resumes the Journey where they left off.
+	_isFirstRun() {
+		return this.progress.tutorialDone.length === 0 && Object.keys(this.progress.stagesCompleted).length === 0;
+	}
+
 	_showTitle() {
 		this._setPhase('title', 'show_title');
 		const done = Object.keys(this.progress.stagesCompleted).length;
+		const stage = content.getStage(this.progress.lastStage || 0);
 		this.ui.showScreen('title', this.ui.buildTitle({
 			dailyInfo: this._dailyInfo || null,
 			journeyProgress: `${done}/${content.STAGES.length} stages`,
+			firstRun: this._isFirstRun(),
+			resumeLabel: stage.name,
+			touch: this.touchOnly,
 		}));
 	}
 
@@ -113,7 +128,7 @@ export class Game {
 		this.audio.event('click');
 		switch (action) {
 			case 'click': return;
-			case 'quick-play': return this._startJourneyLevel(this.progress.lastStage || 0);
+			case 'quick-play': return this._isFirstRun() ? this._startTutorial(0) : this._startJourneyLevel(this.progress.lastStage || 0);
 			case 'back-title': case 'quit': return this._quitToTitle();
 			case 'mode': return this._showModeSetup(payload);
 			case 'leaderboard': return this._showLeaderboard();
@@ -182,7 +197,14 @@ export class Game {
 			leftHanded: !!this.settings.leftHanded,
 			onPedal: (key, down) => this._onPedal(key, down),
 			onPause: () => this._pause(),
+			showKeys: !this.touchOnly,
+			checkpoints: this.session.state.checkpoints,
+			goalX: this.session.state.goalX,
 		});
+		this.coach = { throttled: false, tilted: false, active: null, airHint: false, fuelHint: false, idle: 0 };
+		const hintKey = { throttle: 'throttle', brake: 'brake', tilt: 'tiltR', fuel: null }[meta.tutorial?.hint] || null;
+		this.coach.highlight = hintKey;
+		this.ui.highlightPedal(hintKey);
 		this.ui.showHud();
 		this._resize();
 		this._countdown(3);
@@ -199,10 +221,14 @@ export class Game {
 			this.audio.event('go');
 			this._setPhase('active', 'countdown_done');
 			this.audio.startMusic();
-			this.ui.announce('Go!');
+			this.audio.startAmbience();
+			this.ui.announce('Go! ' + this._gasVerb() + ' to drive.');
+			// Keep the "how do I move" prompt up until the first press of the throttle.
+			this.coach.active = 'gas';
+			this.ui.showHint(this._gasVerb() + ' to drive');
 			return;
 		}
-		this.ui.showCountdown(n === 3 ? (this.levelMeta.intro || String(n)) : String(n));
+		this.ui.showCountdown(n === 3 ? (this.levelMeta.intro || String(n)) : String(n), 'Get ready: ' + this._gasVerb().replace(/^./, (ch) => ch.toLowerCase()) + ' to drive');
 		this.audio.event('countdown');
 		setTimeout(() => { if (this.phase === 'countdown') this._countdown(n - 1, token); }, this.levelMeta.intro && n === 3 ? 1600 : 900);
 	}
@@ -247,6 +273,7 @@ export class Game {
 		const m = this.levelMeta;
 		if (m?.kind === 'journey' && m.index + 1 < content.STAGES.length) return this._startJourneyLevel(m.index + 1);
 		if (m?.kind === 'learn' && m.index + 1 < content.TUTORIALS.length) return this._startTutorial(m.index + 1);
+		if (m?.kind === 'learn') return this._startJourneyLevel(0); // training done: straight into the Journey
 		return this._showTitle();
 	}
 
@@ -256,6 +283,7 @@ export class Game {
 		}
 		this.audio.setEngine(false);
 		this.audio.stopMusic();
+		this.audio.stopAmbience();
 		this.session?.close();
 		this.session = null;
 		this.render?.unloadLevel();
@@ -278,6 +306,7 @@ export class Game {
 	_resume() {
 		if (!this.session) return this._showTitle();
 		this._setPhase('active', 'resume');
+		this.audio.startAmbience();
 		this.ui.showHud();
 		this.acc = 0;
 		this.lastTime = performance.now();
@@ -296,12 +325,19 @@ export class Game {
 		}
 	}
 
+	// Settings sliders are 0–100; the audio module's gain domain is 0–1.
+	_busVolumes() {
+		const out = {};
+		for (const bus of ['music', 'sfx', 'ambience', 'voice']) out[bus] = (this.settings.volumes?.[bus] ?? 80) / 100;
+		return out;
+	}
+
 	_updateSettings(patch) {
 		Object.assign(this.settings, patch);
 		saveSettings(this.settings);
 		this.ui.applySettings(this.settings);
 		this.audio.setMuted(!!this.settings.muted);
-		for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this.settings.volumes[bus]);
+		for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this._busVolumes()[bus]);
 		this.render?.setTier(this.settings.tier);
 		this.render?.setReducedMotion(!!this.settings.reducedMotion);
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
@@ -345,6 +381,58 @@ export class Game {
 		this.input.brake = (p.brake || k.brake) ? 1000 : 0;
 		const l = (p.tiltL || k.tiltL) ? 1 : 0, r = (p.tiltR || k.tiltR) ? 1 : 0;
 		this.input.tilt = (l - r) * 1000; // tilt back = negative pitch change
+		const c = this.coach;
+		if (c) {
+			if (this.input.throttle) {
+				c.throttled = true;
+				if (c.active === 'gas' || c.active === 'idle') this._clearHint();
+				if (c.highlight === 'throttle') this._clearHighlight();
+			}
+			if (this.input.tilt) {
+				c.tilted = true;
+				if (c.active === 'air') this._clearHint();
+				if (c.highlight === 'tiltR') this._clearHighlight();
+			}
+			if (this.input.brake && c.highlight === 'brake') this._clearHighlight();
+		}
+	}
+
+	// --- Coaching -------------------------------------------------------------------------
+	// Short, single-line prompts that name the next useful action. Each fires at most once
+	// per run; the throttle prompt stays until the player actually presses it.
+
+	_gasVerb() {
+		const hold = this.settings.holdToDrive !== false;
+		if (this.touchOnly) return hold ? 'Hold GAS' : 'Tap GAS';
+		return hold ? 'Hold ↑ or W' : 'Tap ↑ or W';
+	}
+
+	_clearHint() { this.coach.active = null; this.ui.showHint(null); }
+	_clearHighlight() { this.coach.highlight = null; this.ui.highlightPedal(null); }
+
+	_hint(kind, text, ms) {
+		this.coach.active = kind;
+		this.ui.showHint(text, ms);
+		if (ms) setTimeout(() => { if (this.coach && this.coach.active === kind) this.coach.active = null; }, ms);
+	}
+
+	_coach(state) {
+		const c = this.coach, v = state.vehicle;
+		if (!c || this.phase !== 'active') return;
+		const fresh = (this.progress.runsPlayed || 0) < 6 || this.mode === 'learn';
+		// Stopped with no throttle for a second and a half: remind how to move.
+		if (c.throttled && v.grounded && Math.abs(v.vx) < 0.5 && !this.input.throttle) {
+			c.idle++;
+			if (c.idle === 90 && !c.active) this._hint('idle', this._gasVerb() + ' to get going', 2500);
+		} else c.idle = 0;
+		if (fresh && !c.airHint && !v.grounded && state.airTime > 0.35 && !this.input.tilt && (!c.active || c.active === 'idle')) {
+			c.airHint = true;
+			this._hint('air', (this.touchOnly ? 'In the air: TILT ◀ ▶' : 'In the air: ← → tilt') + ' to match the slope', 2500);
+		}
+		if (!c.fuelHint && v.fuel < (v.fuelMax || 100) * 0.25 && c.active !== 'gas') {
+			c.fuelHint = true;
+			this._hint('fuel', 'Fuel low: ease off downhill and grab the yellow cans', 3000);
+		}
 	}
 
 	_bindGlobalInput() {
@@ -455,6 +543,7 @@ export class Game {
 				steps++;
 			}
 			if (this.session.finished()) this._resolve();
+			else this._coach(this.session.state);
 		}
 
 		const state = this.session.state;
@@ -487,8 +576,10 @@ export class Game {
 			this.audio.event('land_hard');
 			this.render.addShake(0.25);
 		}
+		if (before.grounded && !s.vehicle.grounded) this.audio.event('airborne');
 		if (s.terminalReason && !before.terminal) {
 			if (s.terminalReason === 'crashed') { this.audio.event('crash'); this.render.addShake(0.9); }
+			if (s.terminalReason === 'out_of_fuel') this.audio.event('dry');
 		}
 	}
 
@@ -498,6 +589,7 @@ export class Game {
 		this._setPhase('resolving', 'terminal_' + this.session.state.terminalReason);
 		this.audio.setEngine(false);
 		this.audio.stopMusic();
+		this.audio.stopAmbience();
 		const result = this.session.result();
 		const won = result.terminalReason === 'finished';
 		if (won) this.audio.event('finish');
@@ -505,6 +597,8 @@ export class Game {
 		this.streak = won ? this.streak + 1 : 0;
 		this.totalDistance += Math.floor(this.session.state.vehicle.x);
 		this.progress.totalDistance = this.totalDistance;
+		this.progress.runsPlayed = (this.progress.runsPlayed || 0) + 1;
+		this.ui.showHint(null);
 
 		// Progression persistence.
 		const m = this.levelMeta;
@@ -532,6 +626,7 @@ export class Game {
 			if (!this.progress.achievements.includes(a.key) && a.check(ctx)) {
 				this.progress.achievements.push(a.key);
 				newAch.push(a.name);
+				this.audio.event('achievement');
 				this.ui.announce(`Achievement unlocked: ${a.name}`, true);
 				this.platform.unlockAchievement(a.key, this.session.id);
 			}
@@ -554,11 +649,15 @@ export class Game {
 		}
 
 		this._setPhase('results', 'show_results');
-		const hasNext = (m?.kind === 'journey' && m.index + 1 < content.STAGES.length) || (m?.kind === 'learn' && m.index + 1 < content.TUTORIALS.length);
+		let nextLabel = null;
+		if (m?.kind === 'journey' && m.index + 1 < content.STAGES.length) nextLabel = STRINGS.next;
+		else if (m?.kind === 'learn') nextLabel = m.index + 1 < content.TUTORIALS.length ? STRINGS.nextLesson : STRINGS.startJourney;
+		// Losing a stage offers "Next" only where progress already allows it; losing a lesson still lets you move on.
+		if (!won && m?.kind === 'journey') nextLabel = null;
 		this.ui.showScreen('results', this.ui.buildResults({
 			result, breakdown: result.breakdown, won,
 			isDaily: m?.kind === 'daily', newAchievements: newAch,
-			nextLabel: hasNext ? STRINGS.next : null,
+			stageName: m?.name, nextLabel,
 		}));
 		this._setPhase('progression', 'saved');
 	}

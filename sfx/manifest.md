@@ -1,6 +1,7 @@
 # SFX manifest — hillwheel
 
 Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-normalized; 100 inference steps).
+Canonical source of truth is `manifest.txt`; `manifest.json` drives regeneration.
 
 | file | event | prompt |
 |---|---|---|
@@ -17,3 +18,7 @@ Generated with MOSS-SoundEffect v2.0, 48 kHz mono Opus (96 kbps VBR, loudness-no
 | ui-click.opus | click | A single clean UI button click, like a small plastic key pressed on a handheld device, short and neutral. |
 | countdown-beep.opus | countdown | A single clear electronic countdown beep, mid-pitched sine tone with a soft attack, like a race timer tick. |
 | go-horn.opus | go | A short punchy air-horn style start signal, single bright honk, energetic but small, like a toy race starter horn. |
+| engine-sputter.opus | dry | A small petrol engine coughing and dying as the tank runs dry, two weak sputters then silence, dusty and mechanical, no music. |
+| takeoff-whoosh.opus | airborne | A short airy whoosh of a light vehicle launching off a dirt crest, rushing wind with a faint suspension rebound creak, quick and dry. |
+| achievement-unlock.opus | achievement | A warm three-note ascending chime on a small glockenspiel with a soft shimmer tail, rewarding and gentle, clean ending. |
+| wind-ambience.opus | ambience | A steady quiet outdoor ambience of gentle breeze over open grassy hills with distant birdsong, no music, no impacts, even level throughout for seamless looping. |

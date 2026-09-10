@@ -34,7 +34,7 @@ const browserNoise = /GL Driver Message|GPU stall due to ReadPixels|Automatic fa
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp',
   '.ico': 'image/x-icon', '.wav': 'audio/wav', '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.glb': 'model/gltf-binary',
   '.woff2': 'font/woff2', '.ts': 'video/mp2t',
@@ -209,7 +209,7 @@ async function runPass(browser, base, vp) {
 
     if (!isMobile) {
       await step('journey select lists 40 stages, first unlocked', async () => {
-        await page.click('.hw-panel button:text-is("Journey")');
+        await page.click('.hw-panel .hw-btn-mode:has-text("Journey")');
         await page.waitForSelector('.hw-level-list', { timeout: 5000 });
         const cells = await page.locator('.hw-level-list button').count();
         if (cells !== 40) throw new Error(`expected 40 stages, got ${cells}`);
@@ -251,7 +251,7 @@ async function runPass(browser, base, vp) {
       });
 
       await step('practice mode runs with undo available', async () => {
-        await page.click('.hw-panel button:text-is("Practice")');
+        await page.click('.hw-panel .hw-btn-mode:has-text("Practice")');
         await page.waitForSelector('.hw-level-list', { timeout: 5000 });
         await page.click('button:has-text("Easy hills")');
         await waitActive(page);

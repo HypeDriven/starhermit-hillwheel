@@ -1,7 +1,9 @@
 {
   "private": true,
   "scripts": {
-    "test:e2e": "node tests/e2e.mjs"
+    "test": "node test.js",
+    "test:e2e": "node tests/e2e.mjs",
+    "test:review": "node tests/review-fixes.mjs"
   },
   "dependencies": {
     "esbuild": "^0.28.1",

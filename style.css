@@ -60,6 +60,16 @@ body {
 .hw-danger { border-color: #a85a4e; }
 .hw-btn.done { border-color: #4ed88a; }
 
+/* Title: mode buttons carry a one-line description; the primary button gets a note under it. */
+.hw-btn-mode { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 14px; }
+.hw-mode-label { font-weight: 600; }
+.hw-mode-desc { font-size: 0.8rem; color: #b8c8bc; line-height: 1.3; }
+.hw-primary-note { margin: -4px 0 4px; text-align: center; }
+.hw-controls-strip {
+	margin: 12px 0 0; padding-top: 10px; border-top: 1px solid #3a4a40;
+	color: #b8c8bc; font-size: 0.85rem;
+}
+
 .hw-level-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin-bottom: 12px; }
 
 /* --- HUD --- */
@@ -75,8 +85,20 @@ body {
 	background: linear-gradient(rgba(12,20,16,0.7), transparent);
 }
 .hw-hud-top > * { pointer-events: auto; }
-.hw-hud-objective { flex: 1; font-size: 0.95rem; }
-.hw-hud-score { font-size: 1.4rem; font-weight: 700; min-width: 3ch; text-align: right; }
+.hw-hud-label { display: block; font-size: 0.65rem; letter-spacing: 0.08em; color: #b8c8bc; line-height: 1; margin-bottom: 3px; }
+.hw-hud-objective { flex: 1; min-width: 0; font-size: 0.9rem; }
+.hw-hud-objective-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.hw-hud-track { position: relative; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.22); max-width: 320px; margin-right: 8px; }
+.hw-hud-tick { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; background: #f2c14e; border-radius: 1px; }
+.hw-hud-tick-goal { background: #4ed88a; width: 4px; margin-left: -2px; }
+.hw-hud-marker {
+	position: absolute; top: -4px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%;
+	background: #f0f4ee; border: 2px solid #1c2a22; box-shadow: 0 0 0 1px rgba(255,255,255,0.5);
+	transition: left 0.1s linear;
+}
+.hw-hud-score-wrap { text-align: right; }
+.hw-hud-score { font-size: 1.4rem; font-weight: 700; min-width: 3ch; text-align: right; line-height: 1; font-variant-numeric: tabular-nums; }
+.hw-hud-fuel-wrap { text-align: right; }
 .hw-hud-fuel {
 	width: 90px; height: 14px; border: 1px solid #6a7a6e; border-radius: 7px; overflow: hidden;
 	background: #16201a;
@@ -100,13 +122,31 @@ body {
 }
 .hw-pedal.active { background: #2e7d4e; border-color: #4ed88a; }
 .hw-pedal:focus-visible { outline: 3px solid #f2c14e; }
+.hw-pedal-label { display: block; white-space: nowrap; }
+.hw-pedal-keys { display: block; font-size: 0.75rem; font-weight: 500; color: #b8c8bc; margin-top: 3px; white-space: nowrap; }
+.hw-pedal.hint { border-color: #f2c14e; animation: hw-pulse 1.1s ease-in-out infinite; }
+@keyframes hw-pulse {
+	0%, 100% { box-shadow: 0 0 0 0 rgba(242, 193, 78, 0.6); }
+	50% { box-shadow: 0 0 0 10px rgba(242, 193, 78, 0); }
+}
+
+/* Coaching banner: the next useful action, one line, above the pedals. */
+.hw-hud-hint {
+	align-self: center; margin: 0 12px; padding: 10px 18px; border-radius: 10px;
+	background: rgba(12, 20, 16, 0.78); border: 1px solid #f2c14e; color: #f0f4ee;
+	font-size: clamp(1rem, 2.6vw, 1.25rem); font-weight: 600; text-align: center;
+	max-width: 90%; pointer-events: none;
+}
 
 .hw-countdown {
 	position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
-	font-size: clamp(1.5rem, 6vw, 3rem); font-weight: 700; text-align: center;
+	text-align: center; width: max-content;
 	background: rgba(12, 20, 16, 0.75); border-radius: 12px; padding: 16px 28px;
-	max-width: 70ch; pointer-events: none;
+	max-width: min(70ch, calc(100vw - 32px)); pointer-events: none;
 }
+.hw-countdown-main { font-size: clamp(1.5rem, 6vw, 3rem); font-weight: 700; line-height: 1.2; }
+.hw-countdown-main.hw-countdown-long { font-size: clamp(1.05rem, 2.8vw, 1.5rem); font-weight: 600; max-width: 34ch; }
+.hw-countdown-hint { margin-top: 8px; font-size: clamp(0.95rem, 2.4vw, 1.15rem); color: #f2c14e; font-weight: 600; }
 
 /* --- Results --- */
 .hw-score-table { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; margin: 12px 0; }
@@ -114,6 +154,8 @@ body {
 .hw-score-table dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .hw-total { font-weight: 700; font-size: 1.2rem; border-top: 1px solid #3a4a40; padding-top: 6px; }
 .hw-achievements { color: #f2c14e; }
+.hw-end-reason { background: #1a2620; border-left: 3px solid #d84e2e; border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
+.hw-end-reason p { margin: 4px 0 0; color: #b8c8bc; font-size: 0.95rem; }
 
 /* --- Settings --- */
 .hw-settings { margin: 12px 0; border-top: 1px solid #3a4a40; padding-top: 8px; }
@@ -143,15 +185,21 @@ body {
 /* --- Portrait mobile: sheet-style panels, thumb-zone tray --- */
 @media (max-width: 640px) and (orientation: portrait) {
 	.hw-screen-layer { align-items: flex-end; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
-	.hw-panel { border-radius: 16px 16px 0 0; max-height: 85%; }
+	.hw-panel { border-radius: 16px 16px 0 0; max-height: 85%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 	.hw-pedal { min-height: 72px; font-size: 1rem; }
-	.hw-hud-fuel { width: 64px; }
+	.hw-hud-fuel { width: 56px; }
+	.hw-hud-top { gap: 8px; }
+	.hw-hud-mirror { display: none; }
+	.hw-hud-objective { font-size: 0.8rem; }
+	.hw-hud-hint { margin-bottom: 8px; }
 }
 
 /* --- Landscape mobile: narrow status rail, 44px targets --- */
 @media (max-height: 500px) and (orientation: landscape) {
 	.hw-hud-top { padding: 4px 10px; font-size: 0.85rem; }
+	.hw-hud-mirror { display: none; }
 	.hw-pedal { min-height: 48px; min-width: 48px; }
+	.hw-pedal-keys { display: none; }
 	.hw-hud-tray { padding: 6px 10px; }
 }
 
@@ -162,6 +210,7 @@ body {
 .hw-root.high-contrast .hw-btn-primary { background: #004d26; }
 .hw-root.high-contrast .hw-pedal { background: #000; color: #fff; border-color: #fff; }
 .hw-root.high-contrast .hw-pedal.active { background: #004d26; }
+.hw-root.high-contrast .hw-hud-hint, .hw-root.high-contrast .hw-countdown { background: #000; border: 1px solid #fff; }
 
 /* Color-vision palettes reinforce hue with distinct accents (color is never the
    only channel: icons, labels and shapes carry state too). */
@@ -173,3 +222,14 @@ body {
 	.hw-hud-fuel-bar { transition: none; }
 }
 .hw-root.reduced-motion * { transition: none !important; animation: none !important; }
+
+/* --- Title key art -------------------------------------------------------
+   assets/keyart.webp sits behind the title panel only. If the file fails to
+   load the layer keeps the flat background colour underneath, so the screen
+   is never blank. */
+.hw-screen-layer[data-screen="title"] {
+	background-image: linear-gradient(rgba(18, 28, 22, 0.55), rgba(18, 28, 22, 0.82)), url('./assets/keyart.webp');
+	background-size: cover;
+	background-position: center 35%;
+	background-color: #1c2a22;
+}
