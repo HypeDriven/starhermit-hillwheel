@@ -23,9 +23,23 @@ export function detectCapabilities() {
 }
 
 function readLaunchToken() {
-	// The host shell may inject a short-lived launch token via query param or global.
+	// Hosted: the platform delivers the launch token in the URL fragment
+	// (#game_token=<jwt>[&session_id=<guid>]). Read it once, then strip it from
+	// the URL so it is neither bookmarked nor visible after boot.
+	if (location.hash.length > 1) {
+		const frag = new URLSearchParams(location.hash.slice(1));
+		const token = frag.get('game_token');
+		if (token) {
+			frag.delete('game_token');
+			const rest = frag.toString();
+			history.replaceState(null, '', location.pathname + location.search + (rest ? '#' + rest : ''));
+			return token;
+		}
+	}
+	// Local dev fallbacks only; the production host uses the fragment.
 	const params = new URLSearchParams(location.search);
-	return params.get('launch_token') || window.__STARHERMIT_LAUNCH_TOKEN__ || null;
+	return params.get('launch_token') || params.get('token') || params.get('launch')
+		|| window.__STARHERMIT_LAUNCH_TOKEN__ || null;
 }
 
 export function bootstrap(rootEl) {

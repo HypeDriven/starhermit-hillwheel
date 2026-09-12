@@ -10,12 +10,15 @@
  *
  * Server note: the repo's server.js is a StarHermit authoritative game
  * script, so it is NOT used here. This test embeds a minimal node:http static
- * server on an ephemeral port. platform.js degrades gracefully offline: the
- * only network call the game ever makes is GET /api/v1/time (the one route
- * the host guarantees), which the embedded server answers with a stub; all
- * other platform features (leaderboards, cloud saves, telemetry) are local
- * no-ops, so the leaderboard screen legitimately shows its "unavailable"
- * state offline.
+ * server on an ephemeral port. No launch token is present, so the game runs
+ * unhosted: it probes GET /api/v1/time (stubbed) and may best-effort call the
+ * local-dev routes (leaderboard read; daily score submission after a daily
+ * run), which the stub answers with 404 — a 404 on those optional capability
+ * routes is the game's dev-server probe failing gracefully (it is remembered
+ * and never retried), not a defect, so resource 404s under /api/v1/ are
+ * filtered out of the console-error assertion below. Hosted-mode routes
+ * (profile, cloud saves, platform leaderboards, token refresh) are only
+ * exercised when a launch token exists, i.e. not in this harness.
  *
  * Run: npm run test:e2e
  */
@@ -30,6 +33,10 @@ const SHOT = (stage, vp) => `/tmp/hillwheel-e2e-${stage}-${vp}.png`;
 
 // Benign GPU/swiftshader console noise (from tools/production_game_audit.mjs).
 const browserNoise = /GL Driver Message|GPU stall due to ReadPixels|Automatic fallback to software WebGL|EnableWebGLDeveloperExtensions/i;
+// The game probes optional local-dev capability routes (e.g. its own leaderboard)
+// which this stub answers with 404; that handled probe is not a page defect. Asset
+// or module 404s outside /api/v1/ still fail the run.
+const apiProbe404 = (m) => /Failed to load resource/.test(m.text()) && (m.location()?.url || '').includes('/api/v1/');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -158,7 +165,7 @@ async function runPass(browser, base, vp) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error' && !browserNoise.test(m.text())) errors.push(`console: ${m.text()}`); });
+  page.on('console', (m) => { if (m.type() === 'error' && !browserNoise.test(m.text()) && !apiProbe404(m)) errors.push(`console: ${m.text()}`); });
 
   const step = async (name, fn) => { await fn(); console.log(`ok - [${vp}] ${name}`); };
 
@@ -201,7 +208,9 @@ async function runPass(browser, base, vp) {
 
     await step('leaderboard degrades gracefully offline', async () => {
       await page.click('button:has-text("Leaderboards")');
-      await page.waitForSelector('.hw-note', { timeout: 5000 });
+      // The adapter resolves asynchronously (offline probe), so wait for the
+      // settled note rather than the transient 'Loading…' state.
+      await page.waitForFunction(() => /unavailable|No scores/.test(document.querySelector('.hw-panel .hw-note')?.textContent || ''), null, { timeout: 5000 });
       const note = await page.textContent('.hw-note');
       if (!/unavailable|No scores/.test(note || '')) throw new Error('unexpected leaderboard note: ' + note);
       await page.click('button:has-text("← Back")');

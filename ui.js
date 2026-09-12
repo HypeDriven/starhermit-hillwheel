@@ -21,7 +21,7 @@ export const END_REASONS = {
 export const MODE_DESCRIPTIONS = {
 	journey: '40 stages, easy to wild. Your progress is saved.',
 	learn: 'Five short lessons, one control at a time.',
-	daily: 'One shared course per day. Ranked.',
+	daily: 'One shared course per day — the same hills for everyone.',
 	practice: 'Pick a hill type. Undo is allowed.',
 	challenge: 'Special rules: fuel-starved, timed, cliffs, marathon.',
 };
@@ -173,9 +173,17 @@ export function createUi(root, onAction, settings) {
 		return b;
 	}
 
-	function buildTitle({ dailyInfo, journeyProgress, firstRun, resumeLabel, touch } = {}) {
+	const SYNC_LABELS = {
+		syncing: 'syncing…', saving: 'saving…', synced: 'synced', offline: 'offline', error: 'sync error',
+	};
+
+	function buildTitle({ dailyInfo, journeyProgress, firstRun, resumeLabel, touch, profile } = {}) {
 		const p = panel(STRINGS.title, STRINGS.tagline);
 		p.querySelector('h1').classList.add('hw-title');
+		if (profile) {
+			p.appendChild(el('p', 'hw-note hw-profile',
+				`${profile.name || '…'} · ${SYNC_LABELS[profile.sync] || profile.sync}`));
+		}
 		const col = el('div', 'hw-btn-col');
 		const primary = button(firstRun ? 'Quick play — learn the basics' : `Quick play — ${resumeLabel || 'continue'}`, 'hw-btn-primary', () => onAction('quick-play'));
 		col.appendChild(primary);
@@ -210,7 +218,8 @@ export function createUi(root, onAction, settings) {
 	};
 
 	function buildModeSetup({ mode, levels = [], ranked, onPick } = {}) {
-		const p = panel(MODE_TITLES[mode] || 'Select', ranked ? 'Ranked — one shared run for everyone.' : null);
+		const p = panel(MODE_TITLES[mode] || 'Select',
+			ranked ? 'One shared course per day — the same hills for everyone.' : null);
 		const list = el('div', 'hw-level-list');
 		levels.forEach((lv, i) => {
 			const b = button(lv.label, lv.done ? 'done' : null, () => onPick(i));

@@ -50,6 +50,7 @@ export class Game {
 		this.platform = createPlatform(env.platform || {});
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
 		if (env.launchToken) this.platform.setLaunchToken(env.launchToken);
+		this.platform.onChange = () => this._onPlatformChange();
 
 		this.ui = createUi(root, (a, p) => this._onAction(a, p), this.settings);
 		this.audio = createAudio({ volumes: this._busVolumes() });
@@ -79,6 +80,8 @@ export class Game {
 		}
 		this.platform.syncTime().then(() => this._refreshDaily());
 		this.platform.startActivity();
+		this.platform.loadProfile();
+		this._loadCloudSave();
 		this._setPhase('title', 'boot_complete');
 		this._showTitle();
 		this._resize();
@@ -111,6 +114,7 @@ export class Game {
 			firstRun: this._isFirstRun(),
 			resumeLabel: stage.name,
 			touch: this.touchOnly,
+			profile: this._profileStatus(),
 		}));
 	}
 
@@ -118,6 +122,46 @@ export class Game {
 		const date = this.platform.todayUTC();
 		this._daily = content.dailyContent(date);
 		this._dailyInfo = date;
+		if (this.phase === 'title') this._showTitle();
+	}
+
+	// Cloud mirror: localStorage (ui.js) is the offline cache; the platform cloud
+	// slot is loaded remote-first at boot and pushed debounced after every change.
+	async _loadCloudSave() {
+		const res = await this.platform.loadSave();
+		if (!res.ok || !res.doc) return;
+		const doc = res.doc;
+		if (doc.progress && typeof doc.progress === 'object') {
+			this.progress = Object.assign(structuredClone(this.progress), doc.progress);
+			this.totalDistance = this.progress.totalDistance || 0;
+			saveProgress(this.progress);
+		}
+		if (doc.settings && typeof doc.settings === 'object') {
+			this.settings = Object.assign(structuredClone(this.settings), doc.settings);
+			saveSettings(this.settings);
+			this.ui.applySettings(this.settings);
+			this.audio.setMuted(!!this.settings.muted);
+			for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this._busVolumes()[bus]);
+			this.platform.telemetryConsent = !!this.settings.telemetryConsent;
+		}
+		if (this.phase === 'title') this._showTitle();
+	}
+
+	_saveDoc() {
+		return { schemaVersion: 1, savedAt: Date.now(), progress: this.progress, settings: this.settings };
+	}
+
+	_persistProgress() {
+		saveProgress(this.progress);
+		this.platform.queueSave(this._saveDoc());
+	}
+
+	_profileStatus() {
+		if (!this.platform.launchToken) return null;
+		return { name: this.platform.nickname || '…', sync: this.platform.syncState };
+	}
+
+	_onPlatformChange() {
 		if (this.phase === 'title') this._showTitle();
 	}
 
@@ -236,7 +280,7 @@ export class Game {
 	_startJourneyLevel(i) {
 		const s = content.getStage(i);
 		this.progress.lastStage = i;
-		saveProgress(this.progress);
+		this._persistProgress();
 		this._prepare(content.levelConfig(s, 'journey'), { kind: 'journey', index: i, id: s.id, theme: s.theme, name: s.name });
 	}
 
@@ -335,6 +379,7 @@ export class Game {
 	_updateSettings(patch) {
 		Object.assign(this.settings, patch);
 		saveSettings(this.settings);
+		this.platform.queueSave(this._saveDoc());
 		this.ui.applySettings(this.settings);
 		this.audio.setMuted(!!this.settings.muted);
 		for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this._busVolumes()[bus]);
@@ -503,11 +548,13 @@ export class Game {
 				// Backgrounding pauses solo simulation.
 				if (this.phase === 'active') this._pause();
 				this.audio.setBackgrounded(true);
+				this.platform.flushSave();
 			} else {
 				this.audio.setBackgrounded(false);
 			}
 		});
-		window.addEventListener('beforeunload', () => this.platform.endActivity());
+		window.addEventListener('pagehide', () => this.platform.flushSave());
+		window.addEventListener('beforeunload', () => { this.platform.flushSave(); this.platform.endActivity(); });
 	}
 
 	_resize() {
@@ -631,7 +678,7 @@ export class Game {
 				this.platform.unlockAchievement(a.key, this.session.id);
 			}
 		}
-		saveProgress(this.progress);
+		this._persistProgress();
 
 		// Daily / ranked submission with replay log for server validation.
 		if (m?.kind === 'daily') {
@@ -664,6 +711,7 @@ export class Game {
 
 	dispose() {
 		cancelAnimationFrame(this._raf);
+		this.platform.flushSave();
 		this.platform.endActivity();
 		this.audio.dispose();
 		this.render?.dispose();

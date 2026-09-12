@@ -33,7 +33,7 @@ green flag before the tank runs dry.
 | `render.js` | Three.js scene graph, terrain strip, vehicle, flags, cans, trees, dust, camera, quality tiers |
 | `ui.js` | DOM shell: screens, HUD, pedals, settings/progress persistence, live region, strings |
 | `audio.js` | Web Audio buses, clip playback with synth fallback, engine hum, music, wind ambience |
-| `platform.js` | StarHermit REST adapter: time sync probe, retries/rate limits, telemetry consent |
+| `platform.js` | StarHermit REST adapter: launch-token lifecycle, profile nickname, zip cloud-save slot, read-only leaderboards, time sync, retries/rate limits, telemetry consent |
 | `server.js` | Optional authoritative StarHermit game script: static serving + `/api/v1/*`, replay-validated scores |
 | `style.css` | All presentation: palette, layout, responsive breakpoints, a11y variants |
 | `test.js` | Rules/replay/fuzz/content/server suite — `npm test` |
@@ -416,18 +416,29 @@ Conventions from https://wiki.starhermit.com/. `starhermit.txt` declares `name=H
 
 **Used by the client (`platform.js`).**
 
-- **Launch token** — read from `?launch_token` or `window.__STARHERMIT_LAUNCH_TOKEN__`, decoded
-  for its scope, sent as a bearer header, held in memory only and never persisted.
-- **Server time** — `GET /api/v1/time` is the one route the host guarantees; it sets the RTT-
-  adjusted clock offset, the `hosted` flag, and the UTC date the Daily is derived from.
+- **Launch token** — read once from the `#game_token=` URL fragment (query-param and injected-
+  global fallbacks are local-dev only), stripped from the URL, decoded for `sub` and
+  `game_scope`, sent as a bearer header on every call, held in memory only and never persisted,
+  and re-minted every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry on failure).
+- **Profile** — `GET /api/v1/users/{sub}/profile` supplies the nickname (never `/api/v1/me`, never
+  usernames; `"Player " + id8` fallback), shown with the cloud sync status on the title screen.
+- **Server time** — `GET /api/v1/time` sets the RTT-adjusted clock offset and the UTC date the
+  Daily is derived from.
+- **Cloud save** — one slot, `GET`/`PUT /api/v1/me/cloud-saves/{slug}` as zip+base64; the remote
+  doc wins at load, pushes debounce ~2 s and flush on `pagehide`/`visibilitychange`, and
+  `localStorage` remains the offline cache.
+- **Leaderboards (read-only)** — `GET /api/v1/games/{slug}` → `leaderboardId`, then
+  `GET /api/v1/leaderboards/{leaderboardId}/entries` (top 20, nicknames resolved via the profile
+  route). Without a `leaderboardId` the screen shows its unavailable state.
 - **Telemetry consent** — off by default, a settings checkbox, and the event allow-list is
-  fixed (`start`, `tutorial_step`, `round_end`, `retry`, `settings_change`, `error`).
+  fixed (`start`, `tutorial_step`, `round_end`, `retry`, `settings_change`, `error`). The client
+  sends nothing in any mode; events are only filtered through that allow-list.
 
-**Deliberately local no-ops in the client**, because the production host serves no such route and
-a request would 404: leaderboards, score submission, achievement unlocks, cloud saves, presence
-and activity. Each returns `{ok: false, error: 'offline', recoverable: true}` without issuing a
-request, and the UI shows its offline state (the leaderboard says "unavailable"). Progress,
-settings and achievements persist in `localStorage`.
+**Deliberately local in the client**: achievement unlocks (part of the progress doc, mirrored by
+the cloud save — no platform entitlement or script), ranked score submission (script-owned; the
+replay-validated endpoint lives on the local dev server, wired as an authenticated best-effort
+call with graceful fallback), and presence/activity (no per-game platform routes; hosted mode
+never issues those requests). Progress, settings and achievements persist in `localStorage`.
 
 **Implemented by the game script (`server.js`)** for hosts that do run it: static serving with
 `tests/`, `tools/` and dotfiles refused; `/api/v1/time`; `/api/v1/daily`; `/api/v1/scores` with
@@ -545,9 +556,10 @@ than a wiring change.
 ## 16. Known limitations
 
 - **Localization is not implemented** — the game ships English only (§10).
-- **Hosted platform features are client-side no-ops.** Leaderboards, cloud saves, achievements and
-  presence work only against `server.js`; on the production host the leaderboard screen always
-  shows "unavailable" and scores are never submitted.
+- **Ranked daily submission needs a platform game script**, which this game does not ship: on the
+  production host the daily leaderboard is read-only client-side, and replay-validated score
+  submission works only against the local dev server (`server.js`). Achievements stay local,
+  mirrored by the cloud save.
 - **The engine hum is synthesized**, not an authored loop, so it is thinner than the one-shots.
 - **Trees and rocks are decoration only** — nothing off the centre line is collidable, and the
   theme "rock" colour is currently unused by the renderer.

@@ -40,6 +40,7 @@ body {
 .hw-panel h2 { margin: 0 0 12px; }
 .hw-tagline { color: #b8c8bc; margin-top: 0; }
 .hw-note, .hw-ranked-note { color: #b8c8bc; font-size: 0.9rem; }
+.hw-profile { margin: 0 0 8px; font-weight: 600; letter-spacing: 0.02em; }
 
 .hw-btn-col { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .hw-btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
