@@ -166,6 +166,23 @@ body {
 .hw-check input { width: 22px; height: 22px; }
 .hw-field select { background: #2e3f34; color: #f0f4ee; border: 1px solid #4a5c50; border-radius: 6px; padding: 6px; min-height: 36px; }
 
+/* Graphics section (inside Settings and Pause). */
+.hw-gfx { margin: 12px 0; border-top: 1px solid #3a4a40; padding-top: 8px; }
+.hw-gfx h2 { font-size: 1.15rem; margin: 4px 0 8px; }
+.hw-gfx .hw-field > span:first-child { flex: 1 1 auto; min-width: 0; }
+.hw-gfx .hw-field select { flex: 0 1 auto; max-width: 60%; min-width: 0; }
+.hw-gfx .hw-field select:focus-visible, .hw-gfx input:focus-visible { outline: 3px solid #f2c14e; outline-offset: 2px; }
+.hw-gfx-range { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; justify-content: flex-end; min-width: 0; }
+.hw-gfx-range input[type="range"] { flex: 1 1 auto; min-width: 80px; max-width: 220px; }
+.hw-gfx-value { min-width: 4.5ch; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hw-gfx-summary { margin: 10px 0 0; overflow-wrap: anywhere; }
+.hw-gfx-note { margin: 6px 0 0; color: #f2c14e; }
+.hw-fps {
+	position: absolute; z-index: 15; right: calc(12px + env(safe-area-inset-right)); top: calc(72px + env(safe-area-inset-top));
+	pointer-events: none; font: 600 0.75rem/1 system-ui, sans-serif; font-variant-numeric: tabular-nums;
+	background: rgba(12, 20, 16, 0.6); color: #f0f4ee; padding: 4px 6px; border-radius: 4px;
+}
+
 /* --- Help --- */
 .hw-help-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .hw-help-card { background: #1a2620; border-radius: 8px; padding: 12px; }

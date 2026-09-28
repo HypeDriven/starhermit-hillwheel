@@ -165,7 +165,9 @@ async function runPass(browser, base, vp) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  page.on('console', (m) => { if (m.type() === 'error' && !browserNoise.test(m.text()) && !apiProbe404(m)) errors.push(`console: ${m.text()}`); });
+  page.on('console', (m) => {
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text()) && !apiProbe404(m)) errors.push(`console ${m.type()}: ${m.text()}`);
+  });
 
   const step = async (name, fn) => { await fn(); console.log(`ok - [${vp}] ${name}`); };
 
@@ -202,6 +204,58 @@ async function runPass(browser, base, vp) {
       await page.waitForSelector('.hw-help-grid', { timeout: 5000 });
       const cards = await page.locator('.hw-help-card').count();
       if (cards < 4) throw new Error('expected help cards, got ' + cards);
+      await page.click('button:has-text("← Back")');
+      await page.waitForFunction(() => window.__hillwheel?.phase === 'title');
+    });
+
+    await step('graphics settings: presets and overrides apply live, persist, fit', async () => {
+      const preset = () => page.getAttribute('#hw-canvas', 'data-gfx-preset');
+      // Headless Chrome uses a software GPU, so Auto resolves to Low.
+      if ((await preset()) !== 'low') throw new Error('auto preset on software GPU: ' + (await preset()));
+      await page.click('.hw-panel button:has-text("Settings")');
+      await page.waitForSelector('#hw-gfx');
+      await page.locator('#hw-gfx-preset').scrollIntoViewIfNeeded();
+      if (!/Auto \(detected: Low\)/.test(await page.textContent('#hw-gfx-preset option[value="auto"]'))) throw new Error('auto label');
+      await page.selectOption('#hw-gfx-preset', 'low');
+      await page.waitForFunction(() => document.querySelector('#hw-canvas').dataset.gfxPreset === 'low');
+      await page.selectOption('#hw-gfx-preset', 'ultra');
+      await page.waitForFunction(() => document.querySelector('#hw-canvas').dataset.gfxPreset === 'ultra');
+      await page.waitForTimeout(600); // a few frames with the full post chain
+      await page.selectOption('#hw-gfx-preset', 'high');
+      await page.waitForFunction(() => document.querySelector('#hw-canvas').dataset.gfxPreset === 'high');
+      await page.waitForFunction(() => /2048² shadows/.test(document.querySelector('#hw-gfx-summary')?.textContent || ''));
+      // One per-category override through the visible select.
+      await page.locator('#hw-gfx-bloom').scrollIntoViewIfNeeded();
+      const fromPreset = await page.textContent('#hw-gfx-bloom option[value="preset"]');
+      if (!/From preset \(On\)/.test(fromPreset)) throw new Error('bloom preset label: ' + fromPreset);
+      await page.selectOption('#hw-gfx-bloom', 'off');
+      const applied = await page.evaluate(() => ({ r: window.__hillwheel.render.q.bloom, s: window.__hillwheel.settings.graphics.bloom }));
+      if (applied.r !== 'off' || applied.s !== 'off') throw new Error('bloom override not applied: ' + JSON.stringify(applied));
+      // Keyboard: the frame-rate toggle is reachable and flips with Space.
+      await page.focus('#hw-gfx-fps');
+      await page.keyboard.press('Space');
+      await page.waitForFunction(() => document.getElementById('hw-fps') && !document.getElementById('hw-fps').hidden);
+      // The section fits the viewport width (no horizontal cut-off).
+      const vw = page.viewportSize().width;
+      for (const sel of ['#hw-gfx', '#hw-gfx-preset', '#hw-gfx-scale', '#hw-gfx-antialias', '#hw-gfx-summary']) {
+        await page.locator(sel).scrollIntoViewIfNeeded();
+        const b = await page.locator(sel).boundingBox();
+        if (!b || b.x < 0 || b.x + b.width > vw + 1) throw new Error(`${sel} cut off: ${b && JSON.stringify(b)}`);
+      }
+      await page.screenshot({ path: SHOT('graphics', vp) });
+      // Survives a reload.
+      await page.reload({ waitUntil: 'networkidle' });
+      await page.waitForFunction(() => window.__hillwheel?.phase === 'title');
+      if ((await preset()) !== 'high') throw new Error('preset not persisted: ' + (await preset()));
+      await page.click('.hw-panel button:has-text("Settings")');
+      await page.waitForSelector('#hw-gfx');
+      if ((await page.inputValue('#hw-gfx-preset')) !== 'high') throw new Error('preset select after reload');
+      if ((await page.inputValue('#hw-gfx-bloom')) !== 'off') throw new Error('override after reload');
+      // Choosing a preset clears overrides; back to Auto keeps the rest of the run fast.
+      await page.selectOption('#hw-gfx-preset', 'auto');
+      if ((await page.inputValue('#hw-gfx-bloom')) !== 'preset') throw new Error('preset did not clear overrides');
+      await page.locator('#hw-gfx-fps').uncheck();
+      if ((await preset()) !== 'low') throw new Error('auto after reset: ' + (await preset()));
       await page.click('button:has-text("← Back")');
       await page.waitForFunction(() => window.__hillwheel?.phase === 'title');
     });
@@ -250,6 +304,7 @@ async function runPass(browser, base, vp) {
         if (stage !== 'stage-02') throw new Error('expected stage-02, got ' + stage);
         await page.keyboard.press('Escape');
         await page.waitForSelector('.hw-panel h1:text-is("Paused")', { timeout: 5000 });
+        if (!(await page.$('.hw-panel #hw-gfx'))) throw new Error('Graphics section missing from pause');
         await page.screenshot({ path: SHOT('pause', vp) });
         await page.click('button:has-text("Resume")');
         await page.waitForFunction(() => window.__hillwheel?.phase === 'active');

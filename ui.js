@@ -1,6 +1,9 @@
 // Hillwheel UI layer: DOM shell, screens, HUD, settings/progress persistence.
 // Pure DOM — no three.js here; the 3D scene lives in render.js on the canvas.
 
+import { PRESETS, CATEGORIES, presetTier, resolve, choosePreset, clampScale } from './gfx.js';
+import { gfxStrings } from './gfx-i18n.js';
+
 export const STRINGS = {
 	title: 'Hillwheel',
 	tagline: 'Hold the gas to climb, tilt in the air, land on both wheels. Reach the green flag before the fuel runs out.',
@@ -39,7 +42,7 @@ const PROGRESS_KEY = 'hillwheel-progress-v1';
 
 const DEFAULT_SETTINGS = {
 	volumes: { music: 70, sfx: 80, ambience: 60, voice: 80 },
-	tier: 'high',
+	graphics: {}, // gfx.js saved form; {} = Auto
 	reducedMotion: false,
 	leftHanded: false,
 	holdToDrive: true,
@@ -268,8 +271,6 @@ export function createUi(root, onAction, settings) {
 			f.appendChild(sel);
 			return f;
 		};
-		wrap.appendChild(mkSelect('Quality', [['low', 'low'], ['medium', 'medium'], ['high', 'high']],
-			s.tier, (v) => onSettings({ tier: v })));
 		wrap.appendChild(mkSelect('Colour palette', [
 			['default', 'Default'], ['deuteranopia', 'Deuteranopia'],
 			['protanopia', 'Protanopia'], ['tritanopia', 'Tritanopia'],
@@ -283,9 +284,118 @@ export function createUi(root, onAction, settings) {
 		return wrap;
 	}
 
-	function buildSettings({ settings: s, onSettings } = {}) {
+	// Graphics section: quality preset, render scale, per-effect overrides, adaptive resolution,
+	// frame-rate readout and a cost summary. Changes apply live and re-render only this section.
+	function graphicsSection(gfx) {
+		const t = gfxStrings();
+		const sec = el('section', 'hw-gfx');
+		sec.id = 'hw-gfx';
+		sec.setAttribute('aria-labelledby', 'hw-gfx-title');
+		let timer = 0;
+		const update = (next) => {
+			gfx.set(next);
+			draw();
+			// Pixel size and post status settle after the next frame.
+			requestAnimationFrame(() => requestAnimationFrame(() => sec.isConnected && drawSummary()));
+		};
+		const summaryEl = el('p', 'hw-note hw-gfx-summary');
+		summaryEl.id = 'hw-gfx-summary';
+		summaryEl.setAttribute('aria-live', 'polite');
+		const noteEl = el('p', 'hw-note hw-gfx-note', t.postUnavailable);
+		noteEl.id = 'hw-gfx-post-note';
+		const drawSummary = () => {
+			const info = gfx.info(t.words);
+			if (!info) { summaryEl.textContent = ''; noteEl.hidden = true; return; }
+			summaryEl.textContent = `${info.gpu || t.unknownGpu} · ${info.summary}`;
+			noteEl.hidden = !info.postFailed;
+			sec.dataset.gfxPreset = info.resolved.preset;
+		};
+		const field = (labelText, control, id) => {
+			const f = el('label', 'hw-field');
+			f.htmlFor = id;
+			f.appendChild(el('span', null, labelText));
+			control.id = id;
+			f.appendChild(control);
+			return f;
+		};
+		const select = (options, value, onChange) => {
+			const sel = document.createElement('select');
+			for (const [v, text] of options) {
+				const o = document.createElement('option');
+				o.value = v; o.textContent = text; o.selected = value === v;
+				sel.appendChild(o);
+			}
+			sel.addEventListener('change', () => onChange(sel.value));
+			return sel;
+		};
+		const check = (labelText, checked, id, onChange) => {
+			const f = el('label', 'hw-field hw-check');
+			const input = document.createElement('input');
+			input.type = 'checkbox'; input.checked = !!checked; input.id = id;
+			input.addEventListener('change', () => onChange(input.checked));
+			f.append(input, el('span', null, labelText));
+			return f;
+		};
+		function draw() {
+			const focusId = sec.contains(document.activeElement) ? document.activeElement.id : null;
+			sec.innerHTML = '';
+			const saved = gfx.get();
+			const info = gfx.info(t.words);
+			const detected = info?.detected || 'balanced';
+			const r = resolve(saved, detected);
+			const h = el('h2', 'hw-gfx-title', t.graphics);
+			h.id = 'hw-gfx-title';
+			sec.appendChild(h);
+
+			const presetSel = select([
+				['auto', t.auto.replace('{tier}', t.tier[detected])],
+				...PRESETS.map((pr) => [pr, t.tier[pr]]),
+			], PRESETS.includes(saved.preset) ? saved.preset : 'auto', (v) => update(choosePreset(gfx.get(), v)));
+			presetSel.dataset.gfx = 'preset';
+			sec.appendChild(field(t.quality, presetSel, 'hw-gfx-preset'));
+
+			const scaleWrap = el('span', 'hw-gfx-range');
+			const range = document.createElement('input');
+			range.type = 'range'; range.min = '50'; range.max = '200'; range.step = '5';
+			range.value = String(Math.round(clampScale(saved.render_scale) * 100));
+			range.dataset.gfx = 'render_scale';
+			const out = el('output', 'hw-gfx-value', range.value + '%');
+			range.addEventListener('input', () => { out.textContent = range.value + '%'; });
+			range.addEventListener('change', () => update({ ...gfx.get(), render_scale: Number(range.value) / 100 }));
+			const scaleField = field(t.renderScale, range, 'hw-gfx-scale');
+			scaleField.replaceChild(scaleWrap, range);
+			scaleWrap.append(range, out);
+			sec.appendChild(scaleField);
+
+			for (const [cat, tiers] of Object.entries(CATEGORIES)) {
+				const cur = tiers.includes(saved[cat]) ? saved[cat] : 'preset';
+				const sel = select([
+					['preset', t.fromPreset.replace('{tier}', t.tier[presetTier(r.preset, cat)])],
+					...tiers.map((tier) => [tier, t.tier[tier]]),
+				], cur, (v) => {
+					const next = gfx.get();
+					if (v === 'preset') delete next[cat]; else next[cat] = v;
+					update(next);
+				});
+				sel.dataset.gfxCat = cat;
+				sec.appendChild(field(t.cat[cat], sel, 'hw-gfx-' + cat));
+			}
+			sec.appendChild(check(t.adaptive, saved.adaptive !== false, 'hw-gfx-adaptive', (v) => update({ ...gfx.get(), adaptive: v })));
+			sec.appendChild(check(t.showFps, !!saved.show_fps, 'hw-gfx-fps', (v) => update({ ...gfx.get(), show_fps: v })));
+			sec.append(summaryEl, noteEl);
+			drawSummary();
+			if (focusId) document.getElementById(focusId)?.focus();
+		}
+		draw();
+		clearInterval(timer);
+		timer = setInterval(() => { if (!sec.isConnected) clearInterval(timer); else drawSummary(); }, 1000);
+		return sec;
+	}
+
+	function buildSettings({ settings: s, onSettings, gfx } = {}) {
 		const p = panel('Settings');
 		p.appendChild(settingsForm(s, onSettings));
+		if (gfx) p.appendChild(graphicsSection(gfx));
 		p.appendChild(button(STRINGS.back, 'hw-btn-small', () => onAction('back-title')));
 		return p;
 	}
@@ -311,7 +421,7 @@ export function createUi(root, onAction, settings) {
 		return p;
 	}
 
-	function buildPause({ settings: s, canUndo, onSettings } = {}) {
+	function buildPause({ settings: s, canUndo, onSettings, gfx } = {}) {
 		const p = panel('Paused');
 		const col = el('div', 'hw-btn-col');
 		col.appendChild(button('Resume', 'hw-btn-primary', () => onAction('resume')));
@@ -320,6 +430,7 @@ export function createUi(root, onAction, settings) {
 		col.appendChild(button('Quit to title', 'hw-danger', () => onAction('quit')));
 		p.appendChild(col);
 		p.appendChild(settingsForm(s, onSettings));
+		if (gfx) p.appendChild(graphicsSection(gfx));
 		return p;
 	}
 

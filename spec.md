@@ -24,13 +24,16 @@ green flag before the tank runs dry.
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | Entry point; importmap for `three`, mounts `#app`, loads `bootstrap.js` as a module |
+| `index.html` | Entry point; importmap for `three` and `three/addons/`, mounts `#app`, loads `bootstrap.js` as a module |
 | `bootstrap.js` | Capability detection (WebGL/touch/gamepad/DPR/reduced-motion), launch-token read, asset manifest, `createGame` |
 | `game.js` | Orchestrator: phase machine, fixed-timestep loop, input mapping, coaching, achievements, progression, results |
 | `rules.js` | Pure rules: terrain, physics step, legality, scoring, hashing, commands, terminal states. No DOM, no timers |
 | `content.js` | Versioned content: 5 themes, 5 lessons, 40 journey stages, 4 challenges, daily derivation, offline validators |
 | `session.js` | One rules state plus an ordered idempotent command log, undo snapshots, replay export and verification |
-| `render.js` | Three.js scene graph, terrain strip, vehicle, flags, cans, trees, dust, camera, quality tiers |
+| `render.js` | Three.js scene graph: terrain ribbon, backdrop ridges, sky, clouds/stars, vehicle, flags, cans, trees, rocks, particles, camera, lighting, post-processing chain, adaptive resolution, graphics settings |
+| `gfx.js` | Pure graphics quality model: presets, per-category overrides, GPU detection, `resolve()`, `describe()` |
+| `gfx-i18n.js` | Graphics-panel strings in the nine supported locales, locale picking from `navigator.languages` |
+| `vendor/three/addons/` | three.js r185 (0.185.1) addons: EffectComposer + Render/Shader/Output/GTAO/UnrealBloom/SMAA passes, FXAA, RoomEnvironment, RoundedBoxGeometry, and the shaders they import |
 | `ui.js` | DOM shell: screens, HUD, pedals, settings/progress persistence, live region, strings |
 | `audio.js` | Web Audio buses, clip playback with synth fallback, engine hum, music, wind ambience |
 | `platform.js` | StarHermit REST adapter: launch-token lifecycle, profile nickname, zip cloud-save slot, read-only leaderboards, time sync, retries/rate limits, telemetry consent |
@@ -39,6 +42,7 @@ green flag before the tank runs dry.
 | `test.js` | Rules/replay/fuzz/content/server suite — `npm test` |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI, desktop + mobile — `npm run test:e2e` |
 | `tests/review-fixes.mjs` | Regression checks for settings persistence and countdown/restart |
+| `tests/gfx.test.mjs` | `node --test` unit tests for `gfx.js` and the graphics string catalogue (run by `npm test`) |
 | `smoke.js` | Legacy browser smoke test against `server.js` (superseded by `tests/e2e.mjs`) |
 | `sfx/` | 17 Opus clips + `manifest.txt` (canonical), `manifest.json` (regeneration), `manifest.md` |
 | `assets/keyart.webp` | Title-screen key art |
@@ -234,7 +238,7 @@ shipped level regresses.
 
 - **Input locking.** Driving keys are captured only while the phase is `countdown`, `active` or
   `paused`, and never while focus is in an `input`/`select`/`textarea`/contenteditable — so the
-  settings sliders and the quality select keep their arrow keys. `keyup` always clears the held
+  settings sliders and the graphics selects keep their arrow keys. `keyup` always clears the held
   state, even if focus moved, so nothing sticks.
 - **Hold vs toggle.** "Hold to drive" is the default; turning it off makes each pedal press
   toggle, for players who cannot hold a control.
@@ -290,10 +294,15 @@ rather than clipping.
 | Danger, low fuel, buggy body | `#d84e2e` |
 | Themes (sky / fog / ground / accent) | Meadow `#9fd3e8`/`#cfe8d8`/`#6fae4e`/`#f2c14e`, Dusk Fells `#3a3f66`/`#6a5f8a`/`#5a6a4a`/`#e88a4e`, Frostmoor `#cfe0ea`/`#e8f0f4`/`#dde8ea`/`#5aa8d8`, Ember Heath `#f2c9a0`/`#e8b88a`/`#a87848`/`#d84e2e`, Starlit Down `#141a2e`/`#232a44`/`#2e3a34`/`#8ab8f2` |
 
-**Shape language.** Flat-shaded low-poly: the terrain is a single two-row extruded strip with
-near/far vertex colours, the buggy is boxes plus four cylinders, trees are cone-on-cylinder
-instanced meshes, flags are a pole and a quad. Nothing is textured; silhouette and colour carry
-all meaning.
+**Shape language.** Low-poly with soft, rounded pieces: the course is a ribbon whose track band
+(|z| ≤ 2.5) follows the rules' height profile exactly, edged by a lighter dirt track, grass
+shoulders and a dark soil cut face in front; behind it the ground rolls away into a hazy valley,
+with two fog-tinted backdrop ridges that rise with the course. The buggy is a clear-coated rounded
+chassis with a roll cage, helmeted driver, spoked wheels that roll with distance travelled, and
+glowing head/tail lights. Trees are two-tier instanced pines with per-tree colour variation,
+rocks use the theme rock colour, fuel cans are glossy jerry cans with a soft halo, flags are cloth
+that waves, and the goal has a chequered finish arch. The only textures are generated in code
+(chequer, halo); silhouette and colour still carry all meaning.
 
 **Typography.** System UI stack, weight and size only — no display face. The title is the one
 oversized element; HUD labels are 0.65 rem letter-spaced caps.
@@ -309,9 +318,44 @@ the camera is framed so the landing you are about to choose is always on screen.
 is suppressed entirely, cans stop bobbing and spinning, dust stops emitting, and CSS transitions
 and animations are disabled.
 
-**Quality tiers.** low (DPR 1, no shadows, no trees, no particles, 2.0-unit terrain step, no AA),
-medium (DPR 1.5, 60 % tree density, 60 particles, 1.2 step, AA), high (DPR 2, shadows, full
-trees, 160 particles, 0.7 step, AA).
+**Graphics.** ACES filmic tone mapping with sRGB output; a warm key sun with PCF shadows whose
+box (±30 units) follows the vehicle and is snapped to whole shadow texels so it does not shimmer;
+a hemisphere fill tinted by the theme sky and ground. The sky is a gradient dome framed for the
+gameplay camera, with a sun (a pale moon on dark themes) whose HDR core blooms, drifting low-poly
+clouds, and twinkling stars on dark themes. Image-based lighting comes from a `PMREMGenerator` +
+`RoomEnvironment` map: `scene.environment` at a subtle intensity for diffuse fill, plus a stronger
+per-material env map on glossy pieces (paint, rims, cage, visor, cans, poles). With detailed
+terrain the ground shader adds world-space value noise so large surfaces are never flat. Post
+(EffectComposer, built only when an effect needs it): RenderPass → GTAO (sky, clouds, ridges and
+halos excluded from its pre-pass) → UnrealBloom (threshold 0.92, raised on snow so only lights,
+cans, flags, the sun and sparkles glow) → OutputPass → colour grade (gentle S-curve, +7 %
+saturation, warm highlights/cool shadows, vignette) → SMAA or FXAA; MSAA uses a 4-sample render
+target. Particles are soft point sprites: dust while driving, a puff on every landing, and a
+sparkle burst when a can is collected. Clouds, star twinkle and flag waves stop with reduced
+motion (setting or `prefers-reduced-motion`) or a Still sky.
+
+The Settings screen and the Pause screen both carry a **Graphics** section: Quality (Auto
+(detected: …), Low, Balanced, High, Ultra — Auto comes from the WebGL unmasked renderer string:
+software renderers get Low, discrete GPUs and Apple M-series get High, others Balanced, and
+touch-only devices are capped at Balanced), Render scale 50–200 %, one select per effect —
+Shadows (off/1024²/2048²/4096²), Ambient occlusion (off/on/high), Bloom, Colour grade,
+Anti-aliasing (off/FXAA/SMAA/MSAA), Reflections, Dust and sparkles (off/64/192 particles), Trees
+and rocks (off/60 %/full), Sky (still/animated) and Terrain detail (plain: 2.0-unit step, 8 rows;
+detailed: 0.7-unit step, 17 rows, noise shading, grass tufts) — each defaulting to "From preset
+(…)", plus Adaptive resolution and Show frame rate toggles and a summary line "GPU · cost ·
+W×H px". Choosing a preset clears the overrides. Changes apply immediately (shadow maps, post
+chain, pixel ratio, env maps and material recompiles; terrain/foliage/particle changes rebuild the
+level views from the same seed) and persist as `settings.graphics` in `hillwheel-settings-v1` and
+the cloud save. Pixel ratio is min(DPR, preset cap: Low 1, Balanced 1.5, High/Ultra 2) × preset
+scale (Ultra 1.25) × render scale × adaptive scale. Adaptive resolution averages 90 frames and
+steps down 0.1 (to 0.6) above 26 ms or back up 0.05 below 14 ms. The frame-rate readout
+(`#hw-fps`) sits top-right under the HUD bar and ignores the pointer. Low matches the original
+cheapest tier (DPR 1, no shadows, trees, particles, AA or post). If the post chain cannot be
+built the game renders directly and the panel says so. The canvas carries
+`data-gfx-preset`/`data-gfx-auto`; controls have ids `hw-gfx-preset`, `hw-gfx-scale`,
+`hw-gfx-<category>`, `hw-gfx-adaptive`, `hw-gfx-fps`, `hw-gfx-summary`. Graphics-panel strings are
+localized (en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT) from
+`navigator.languages`.
 
 **Visual assets the design calls for:** title key art (§15) and the platform cover; everything in
 the play scene is procedural by design, so no in-game textures or sprites are shipped.
@@ -471,10 +515,11 @@ presence/activity stubs; telemetry sink; per-IP token-bucket rate limiting; 256 
 - **Loop.** One `requestAnimationFrame` drives everything: clamp Δt to 100 ms, poll the gamepad,
   accumulate into fixed 1/60 steps (max 5 per frame, so a stalled tab never fast-forwards), render
   the interpolated vehicle pose, then update the HUD; the score mirror refreshes every 30 ticks.
-- **Performance budgets.** One draw call for the terrain strip, two instanced meshes for trees,
-  one Points object for dust; ~10 draw calls in a typical frame. Level load is synchronous
-  geometry generation (≈ 500–1500 quads), no network fetch. Target 60 fps at high on desktop and
-  medium on a mid-range phone; `render.stats()` exposes draw calls and triangles.
+- **Performance budgets.** One draw call for the terrain ribbon, two for the backdrop ridges,
+  instanced meshes for trees, rocks, grass tufts and clouds, one Points object for particles; the
+  buggy is ~30 small meshes. Level load is synchronous geometry generation, no network fetch.
+  Target 60 fps at High on desktop and Balanced on a mid-range phone, with adaptive resolution as
+  the safety net; `render.stats()` exposes draw calls and triangles.
 - **Robustness.** WebGL context loss suspends rendering and resumes on restore; a missing WebGL
   context shows the compatibility screen instead of failing; `unloadLevel` disposes every geometry
   and material.
@@ -495,9 +540,15 @@ malformed commands; deterministic replay of recorded sessions plus fuzzed input 
 snapshots; content validation of all 5 lessons, 40 stages, 4 challenges and a 7-day daily window;
 and a live `server.js` API smoke covering time, daily, score validation, leaderboard, achievements
 and saves.
+`npm test` then runs `node --test tests/gfx.test.mjs`: GPU-string detection (including the
+mobile cap), `resolve()` with Auto/preset/overrides/scale clamping, preset-clears-overrides, cost
+summary and the nine-locale string catalogue.
 
 **`npm run test:e2e` (`tests/e2e.mjs`).** Desktop 1280×800 then a fresh mobile 390×844 touch
-context: title visible, settings open/toggle/close, help round-trip, leaderboard degrades
+context: title visible, settings open/toggle/close, help round-trip, Graphics section (Auto is Low
+on the software GPU; Low → Ultra → High through the visible select, a Bloom override, the
+frame-rate toggle by keyboard, no horizontal cut-off, persistence across a reload, Auto clears
+overrides; zero console errors or warnings), leaderboard degrades
 gracefully offline, journey list shows 40 stages with the correct unlock state, a stage driven
 countdown → active → results with a "Finished!" headline, progression persisted to
 `localStorage`, next stage → pause → resume → quit, practice with undo available, and on mobile
@@ -545,9 +596,10 @@ restart during the countdown keeps counting and still completes; no page or cons
 | `sfx/achievement-unlock.opus` | `achievement` cue | MOSS-SFX v2.0, 100 steps | generated in this pass; wired |
 | `sfx/wind-ambience.opus` | Looping ambience bed | MOSS-SFX v2.0, 100 steps | generated in this pass; wired |
 | `three.module.min.js`, `three.core.min.js` | Renderer (MIT, three.js r185) | vendored | shipped |
-| Terrain, vehicle, flags, cans, trees, dust | Play-scene geometry | procedural in `render.js` | by design, no files |
+| Terrain, vehicle, flags, cans, trees, rocks, clouds, particles | Play-scene geometry | procedural in `render.js` | by design, no files |
+| `vendor/three/addons/**` | Post-processing passes, shaders, RoomEnvironment, RoundedBoxGeometry (MIT, three.js 0.185.1) | vendored from the npm release matching the core build | shipped |
 
-No 3D model or character animation is shipped: the buggy is a five-primitive authored mesh, and a
+No 3D model or character animation is shipped: the buggy is an authored primitive assembly, and a
 GLTF loader is not vendored, so importing a generated model would be a renderer change rather
 than a wiring change.
 
@@ -555,14 +607,14 @@ than a wiring change.
 
 ## 16. Known limitations
 
-- **Localization is not implemented** — the game ships English only (§10).
+- **Localization is not implemented** — the game ships English only (§10), except the Graphics
+  settings section, which is localized in all nine locales.
 - **Ranked daily submission needs a platform game script**, which this game does not ship: on the
   production host the daily leaderboard is read-only client-side, and replay-validated score
   submission works only against the local dev server (`server.js`). Achievements stay local,
   mirrored by the cloud save.
 - **The engine hum is synthesized**, not an authored loop, so it is thinner than the one-shots.
-- **Trees and rocks are decoration only** — nothing off the centre line is collidable, and the
-  theme "rock" colour is currently unused by the renderer.
+- **Trees and rocks are decoration only** — nothing off the centre line is collidable.
 - **The vehicle has no suspension model**: the body angle is aligned to the slope rather than
   simulated per wheel, so wheels can visually clip a sharp crest for a frame or two.
 - **`smoke.js` at the repo root is legacy**, depends on the full `playwright` package and drives

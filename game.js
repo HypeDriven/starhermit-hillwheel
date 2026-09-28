@@ -73,7 +73,12 @@ export class Game {
 			return;
 		}
 		try {
-			this.render = createRender(this.ui.canvas, { tier: this.settings.tier, reducedMotion: this.settings.reducedMotion });
+			this.render = createRender(this.ui.canvas, {
+				graphics: this.settings.graphics || {},
+				reducedMotion: !!this.settings.reducedMotion,
+				mobile: this.touchOnly,
+				prefersReducedMotion: !!this.env.capabilities?.reducedMotion,
+			});
 		} catch {
 			this._showCompatibility();
 			return;
@@ -143,6 +148,7 @@ export class Game {
 			this.audio.setMuted(!!this.settings.muted);
 			for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this._busVolumes()[bus]);
 			this.platform.telemetryConsent = !!this.settings.telemetryConsent;
+			this.render?.setGraphics(this.settings.graphics || {});
 		}
 		if (this.phase === 'title') this._showTitle();
 	}
@@ -176,7 +182,7 @@ export class Game {
 			case 'back-title': case 'quit': return this._quitToTitle();
 			case 'mode': return this._showModeSetup(payload);
 			case 'leaderboard': return this._showLeaderboard();
-			case 'settings': return this.ui.showScreen('settings', this.ui.buildSettings({ settings: this.settings, onSettings: (p) => this._updateSettings(p) }));
+			case 'settings': return this.ui.showScreen('settings', this.ui.buildSettings({ settings: this.settings, onSettings: (p) => this._updateSettings(p), gfx: this._gfxApi() }));
 			case 'help': return this.ui.showScreen('help', this.ui.buildHelp());
 			case 'resume': return this._resume();
 			case 'restart': return this._restartLevel();
@@ -344,6 +350,7 @@ export class Game {
 			settings: this.settings,
 			canUndo: this.mode === 'practice' && this.session.snapshots.length > 0,
 			onSettings: (p) => this._updateSettings(p),
+			gfx: this._gfxApi(),
 		}));
 	}
 
@@ -383,16 +390,33 @@ export class Game {
 		this.ui.applySettings(this.settings);
 		this.audio.setMuted(!!this.settings.muted);
 		for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this._busVolumes()[bus]);
-		this.render?.setTier(this.settings.tier);
+		this.render?.setGraphics(this.settings.graphics || {});
 		this.render?.setReducedMotion(!!this.settings.reducedMotion);
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
 		if (this.phase === 'paused') {
 			this.ui.showScreen('pause', this.ui.buildPause({
 				settings: this.settings, canUndo: this.mode === 'practice',
 				onSettings: (p) => this._updateSettings(p),
+				gfx: this._gfxApi(),
 			}));
 		}
 		this.platform.track('settings_change');
+	}
+
+	// Graphics settings change in place (no panel rebuild) so the Settings scroll position and
+	// focus survive; they persist with the other settings and in the cloud save.
+	_gfxApi() {
+		return {
+			get: () => structuredClone(this.settings.graphics || {}),
+			set: (g) => {
+				this.settings.graphics = g;
+				saveSettings(this.settings);
+				this.platform.queueSave(this._saveDoc());
+				this.render?.setGraphics(g);
+				this.platform.track('settings_change');
+			},
+			info: (words) => this.render?.graphicsInfo(words) || null,
+		};
 	}
 
 	async _showLeaderboard() {
