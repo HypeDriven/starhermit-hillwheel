@@ -631,3 +631,7 @@ than a wiring change.
 3. **Ghost replays** — the replay envelope already carries everything needed to render a previous
    run's vehicle alongside the live one on the Daily; nothing draws it yet.
 4. **Per-wheel suspension** so the chassis reads terrain detail the current slope-alignment misses.
+
+## Browser interference
+
+`browser-guard.js` (loaded from `index.html`) suppresses browser UI that gets in the way of play: the right-click context menu, the iOS long-press callout, copy / cut / paste, and page text selection. Text fields (inputs, textareas, selects, contenteditable) keep normal selection, context menu and clipboard behaviour.
