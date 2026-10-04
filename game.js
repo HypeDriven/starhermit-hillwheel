@@ -6,7 +6,7 @@ import * as rules from './rules.js';
 import * as content from './content.js';
 import { createSession } from './session.js';
 import { createRender } from './render.js';
-import { createUi, loadSettings, saveSettings, loadProgress, saveProgress, STRINGS } from './ui.js';
+import { createUi, loadSettings, saveSettings, loadProgress, saveProgress, STRINGS, DEFAULT_BINDINGS, setBindings, keysFor, SH_TEXT } from './ui.js';
 import { createAudio } from './audio.js';
 import { createPlatform } from './platform.js';
 
@@ -49,8 +49,14 @@ export class Game {
 
 		this.platform = createPlatform(env.platform || {});
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
-		if (env.launchToken) this.platform.setLaunchToken(env.launchToken);
 		this.platform.onChange = () => this._onPlatformChange();
+		this.platform.onAuth = (signedIn) => { if (!signedIn) this.ui?.toast(SH_TEXT.signedOut); };
+		this.bindings = structuredClone(DEFAULT_BINDINGS);
+		this.platform.loadBindings(DEFAULT_BINDINGS).then((b) => {
+			this.bindings = b;
+			setBindings(b);
+			if (this.phase === 'title') this._showTitle();
+		});
 
 		this.ui = createUi(root, (a, p) => this._onAction(a, p), this.settings);
 		this.audio = createAudio({ volumes: this._busVolumes() });
@@ -86,7 +92,7 @@ export class Game {
 		this.platform.syncTime().then(() => this._refreshDaily());
 		this.platform.startActivity();
 		this.platform.loadProfile();
-		this._loadCloudSave();
+		this._loadCloudSave().then(() => this._loadPlatformSettings());
 		this._setPhase('title', 'boot_complete');
 		this._showTitle();
 		this._resize();
@@ -120,6 +126,7 @@ export class Game {
 			resumeLabel: stage.name,
 			touch: this.touchOnly,
 			profile: this._profileStatus(),
+			account: { invite: this.platform.hosted, signIn: this.platform.canSignIn() },
 		}));
 	}
 
@@ -153,6 +160,39 @@ export class Game {
 		if (this.phase === 'title') this._showTitle();
 	}
 
+	// Per-player settings KV: platform values win over the local ones when signed in.
+	async _loadPlatformSettings() {
+		const remote = await this.platform.getSettings();
+		if (!remote || typeof remote !== 'object' || !Object.keys(remote).length) return;
+		this.settings = Object.assign(structuredClone(this.settings), remote);
+		this._applySettingsQuiet();
+		if (this.phase === 'title') this._showTitle();
+	}
+
+	_applySettingsQuiet() {
+		saveSettings(this.settings);
+		this.ui.applySettings(this.settings);
+		this.audio.setMuted(!!this.settings.muted);
+		for (const bus of ['music', 'sfx', 'ambience', 'voice']) this.audio.setVolume(bus, this._busVolumes()[bus]);
+		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
+		this.render?.setGraphics(this.settings.graphics || {});
+		this.render?.setReducedMotion(!!this.settings.reducedMotion);
+	}
+
+	// Debounced mirror of the settings object to the platform settings KV.
+	_mirrorSettings() {
+		if (!this.platform.hosted) return;
+		clearTimeout(this._kvTimer);
+		this._kvTimer = setTimeout(() => this.platform.patchSettings(this.settings), 600);
+	}
+
+	_inviteFriend() {
+		const link = this.platform.inviteLink();
+		if (!link) return;
+		const done = (ok) => this.ui.toast(ok ? SH_TEXT.copied : SH_TEXT.copyFailed.replace('{link}', link));
+		try { navigator.clipboard.writeText(link).then(() => done(true), () => done(false)); } catch { done(false); }
+	}
+
 	_saveDoc() {
 		return { schemaVersion: 1, savedAt: Date.now(), progress: this.progress, settings: this.settings };
 	}
@@ -163,8 +203,8 @@ export class Game {
 	}
 
 	_profileStatus() {
-		if (!this.platform.launchToken) return null;
-		return { name: this.platform.nickname || '…', sync: this.platform.syncState };
+		if (!this.platform.hosted) return null;
+		return { name: this.platform.nickname || '…', sync: this.platform.syncState, avatar: this.platform.avatar };
 	}
 
 	_onPlatformChange() {
@@ -184,6 +224,8 @@ export class Game {
 			case 'leaderboard': return this._showLeaderboard();
 			case 'settings': return this.ui.showScreen('settings', this.ui.buildSettings({ settings: this.settings, onSettings: (p) => this._updateSettings(p), gfx: this._gfxApi() }));
 			case 'help': return this.ui.showScreen('help', this.ui.buildHelp());
+			case 'invite': return this._inviteFriend();
+			case 'sign-in': return this.platform.signIn();
 			case 'resume': return this._resume();
 			case 'restart': return this._restartLevel();
 			case 'undo': return this._undo();
@@ -401,6 +443,7 @@ export class Game {
 			}));
 		}
 		this.platform.track('settings_change');
+		this._mirrorSettings();
 	}
 
 	// Graphics settings change in place (no panel rebuild) so the Settings scroll position and
@@ -414,14 +457,24 @@ export class Game {
 				this.platform.queueSave(this._saveDoc());
 				this.render?.setGraphics(g);
 				this.platform.track('settings_change');
+				this._mirrorSettings();
 			},
 			info: (words) => this.render?.graphicsInfo(words) || null,
 		};
 	}
 
+	// Standalone board: the player's own best Daily scores, newest dates first on ties.
+	_localBoard() {
+		const entries = Object.entries(this.progress.dailyBest || {})
+			.map(([id, score]) => ({ name: `Daily ${id.replace(/^daily-/, "")}`, score }))
+			.sort((x, y) => y.score - x.score || (x.name < y.name ? 1 : -1))
+			.slice(0, 20);
+		return { ok: true, data: { entries } };
+	}
+
 	async _showLeaderboard() {
 		this.ui.showScreen('leaderboard', this.ui.buildLeaderboard({ loading: true }));
-		const res = await this.platform.getLeaderboard('global', this._daily?.id);
+		const res = this.platform.hosted ? await this.platform.getLeaderboard() : this._localBoard();
 		this.ui.showScreen('leaderboard', this.ui.buildLeaderboard({
 			entries: res.ok ? res.data.entries : null,
 			error: res.ok ? null : res.error,
@@ -473,7 +526,7 @@ export class Game {
 	_gasVerb() {
 		const hold = this.settings.holdToDrive !== false;
 		if (this.touchOnly) return hold ? 'Hold GAS' : 'Tap GAS';
-		return hold ? 'Hold ↑ or W' : 'Tap ↑ or W';
+		return (hold ? 'Hold ' : 'Tap ') + keysFor('throttle', ' or ');
 	}
 
 	_clearHint() { this.coach.active = null; this.ui.showHint(null); }
@@ -496,7 +549,7 @@ export class Game {
 		} else c.idle = 0;
 		if (fresh && !c.airHint && !v.grounded && state.airTime > 0.35 && !this.input.tilt && (!c.active || c.active === 'idle')) {
 			c.airHint = true;
-			this._hint('air', (this.touchOnly ? 'In the air: TILT ◀ ▶' : 'In the air: ← → tilt') + ' to match the slope', 2500);
+			this._hint('air', (this.touchOnly ? 'In the air: TILT ◀ ▶' : `In the air: ${keysFor('tiltL', '/')} ${keysFor('tiltR', '/')} tilt`) + ' to match the slope', 2500);
 		}
 		if (!c.fuelHint && v.fuel < (v.fuelMax || 100) * 0.25 && c.active !== 'gas') {
 			c.fuelHint = true;
@@ -506,12 +559,13 @@ export class Game {
 
 	_bindGlobalInput() {
 		this.keys = {};
-		const map = {
-			ArrowUp: 'throttle', KeyW: 'throttle',
-			ArrowDown: 'brake', KeyS: 'brake',
-			ArrowLeft: 'tiltL', KeyA: 'tiltL',
-			ArrowRight: 'tiltR', KeyD: 'tiltR',
+		// Driving keys come from the (platform-resolved) bindings: code -> action.
+		const DRIVE = ['throttle', 'brake', 'tiltL', 'tiltR'];
+		const actionOf = (code) => {
+			for (const a of Object.keys(this.bindings)) if (this.bindings[a].includes(code)) return a;
+			return null;
 		};
+		const map = new Proxy({}, { get: (_, code) => { const a = actionOf(code); return DRIVE.includes(a) ? a : undefined; } });
 		// Driving keys are only captured while a run is on screen, and never while a
 		// form control has focus, so arrow keys keep working in the settings sliders,
 		// the quality select and for scrolling menus.
@@ -528,12 +582,12 @@ export class Game {
 				this.audio.event('input');
 				this._syncInput();
 				e.preventDefault();
-			} else if (e.code === 'Escape' || e.code === 'KeyP') {
+			} else if (actionOf(e.code) === 'pause') {
 				if (this.phase === 'active') this._pause();
 				else if (this.phase === 'paused') this._resume();
-			} else if (e.code === 'KeyU' && this.mode === 'practice' && (this.phase === 'active' || this.phase === 'paused')) {
+			} else if (actionOf(e.code) === 'undo' && this.mode === 'practice' && (this.phase === 'active' || this.phase === 'paused')) {
 				this._undo();
-			} else if (e.code === 'KeyC') {
+			} else if (actionOf(e.code) === 'recenter') {
 				if (this.render) this.render._camInit = false;
 			}
 		});
@@ -699,25 +753,16 @@ export class Game {
 				newAch.push(a.name);
 				this.audio.event('achievement');
 				this.ui.announce(`Achievement unlocked: ${a.name}`, true);
-				this.platform.unlockAchievement(a.key, this.session.id);
+				this.platform.unlockAchievement(a.key);
 			}
 		}
-		this._persistProgress();
 
-		// Daily / ranked submission with replay log for server validation.
+		// Daily: the player's best per date is kept locally (the standalone board).
 		if (m?.kind === 'daily') {
-			const replay = this.session.exportReplay();
-			this.platform.submitScore({
-				mode: 'daily', contentId: m.id, seed: replay.seed,
-				ruleset: rules.SCHEMA_VERSION, contentVersion: replay.contentVersion,
-				assists: { reducedMotion: !!this.settings.reducedMotion },
-				durationTicks: result.ticks, breakdown: result.breakdown,
-				commands: replay.commands, hashLog: replay.hashLog,
-				initialHash: replay.initialHash, config: replay.config,
-				sessionId: this.session.id, terminalHash: result.hash,
-				terminalReason: result.terminalReason,
-			});
+			const best = this.progress.dailyBest || (this.progress.dailyBest = {});
+			best[m.id] = Math.max(best[m.id] || 0, result.breakdown.total);
 		}
+		this._persistProgress();
 
 		this._setPhase('results', 'show_results');
 		let nextLabel = null;

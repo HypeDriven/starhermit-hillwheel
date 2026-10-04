@@ -2,7 +2,90 @@
 // Pure DOM — no three.js here; the 3D scene lives in render.js on the canvas.
 
 import { PRESETS, CATEGORIES, presetTier, resolve, choosePreset, clampScale } from './gfx.js';
-import { gfxStrings } from './gfx-i18n.js';
+import { gfxStrings, pickLocale } from './gfx-i18n.js';
+
+// Keyboard bindings: defaults mirror the control.* lines in starhermit.txt;
+// game.js swaps in the player's StarHermit overrides via setBindings().
+export const DEFAULT_BINDINGS = {
+	throttle: ['ArrowUp', 'KeyW'], brake: ['ArrowDown', 'KeyS'],
+	tiltL: ['ArrowLeft', 'KeyA'], tiltR: ['ArrowRight', 'KeyD'],
+	pause: ['Escape', 'KeyP'], undo: ['KeyU'], recenter: ['KeyC'],
+};
+let BINDINGS = structuredClone(DEFAULT_BINDINGS);
+export function setBindings(b) { BINDINGS = structuredClone(b); }
+const KEY_GLYPHS = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc', Space: 'Space' };
+/** Effective keys for an action, e.g. "↑ / W". */
+export function keysFor(action, sep = ' / ') {
+	return (BINDINGS[action] || []).map((c) => KEY_GLYPHS[c] || c.replace(/^Key/, '').replace(/^Digit/, '')).join(sep);
+}
+
+// StarHermit account strings (sign-in, invite link, toasts) in the nine locales.
+const SH_ALL = {
+ "en-US": {
+  "signIn": "Sign in with StarHermit",
+  "invite": "Invite a friend",
+  "copied": "Invite link copied to clipboard.",
+  "copyFailed": "Could not copy the invite link: {link}",
+  "signedOut": "Signed out of StarHermit. Progress keeps saving on this device."
+ },
+ "en-GB": {
+  "signIn": "Sign in with StarHermit",
+  "invite": "Invite a friend",
+  "copied": "Invite link copied to clipboard.",
+  "copyFailed": "Could not copy the invite link: {link}",
+  "signedOut": "Signed out of StarHermit. Progress keeps saving on this device."
+ },
+ "es-419": {
+  "signIn": "Iniciar sesión con StarHermit",
+  "invite": "Invitar a un amigo",
+  "copied": "Enlace de invitación copiado al portapapeles.",
+  "copyFailed": "No se pudo copiar el enlace de invitación: {link}",
+  "signedOut": "Sesión de StarHermit cerrada. El progreso se sigue guardando en este dispositivo."
+ },
+ "es-ES": {
+  "signIn": "Iniciar sesión con StarHermit",
+  "invite": "Invitar a un amigo",
+  "copied": "Enlace de invitación copiado al portapapeles.",
+  "copyFailed": "No se ha podido copiar el enlace de invitación: {link}",
+  "signedOut": "Se ha cerrado la sesión de StarHermit. El progreso se sigue guardando en este dispositivo."
+ },
+ "de-DE": {
+  "signIn": "Mit StarHermit anmelden",
+  "invite": "Freund einladen",
+  "copied": "Einladungslink in die Zwischenablage kopiert.",
+  "copyFailed": "Einladungslink konnte nicht kopiert werden: {link}",
+  "signedOut": "Von StarHermit abgemeldet. Der Fortschritt wird weiter auf diesem Gerät gespeichert."
+ },
+ "fr-FR": {
+  "signIn": "Se connecter avec StarHermit",
+  "invite": "Inviter un ami",
+  "copied": "Lien d’invitation copié dans le presse-papiers.",
+  "copyFailed": "Impossible de copier le lien d’invitation : {link}",
+  "signedOut": "Déconnecté de StarHermit. La progression reste enregistrée sur cet appareil."
+ },
+ "fr-CA": {
+  "signIn": "Se connecter avec StarHermit",
+  "invite": "Inviter un ami",
+  "copied": "Lien d’invitation copié dans le presse-papiers.",
+  "copyFailed": "Impossible de copier le lien d’invitation : {link}",
+  "signedOut": "Déconnecté de StarHermit. La progression reste enregistrée sur cet appareil."
+ },
+ "pt-BR": {
+  "signIn": "Entrar com StarHermit",
+  "invite": "Convidar um amigo",
+  "copied": "Link de convite copiado para a área de transferência.",
+  "copyFailed": "Não foi possível copiar o link de convite: {link}",
+  "signedOut": "Você saiu do StarHermit. O progresso continua salvo neste dispositivo."
+ },
+ "it-IT": {
+  "signIn": "Accedi con StarHermit",
+  "invite": "Invita un amico",
+  "copied": "Link di invito copiato negli appunti.",
+  "copyFailed": "Impossibile copiare il link di invito: {link}",
+  "signedOut": "Disconnesso da StarHermit. I progressi restano salvati su questo dispositivo."
+ }
+};
+export const SH_TEXT = SH_ALL[pickLocale(typeof navigator !== 'undefined' ? (navigator.languages || [navigator.language]) : [])] || SH_ALL['en-US'];
 
 export const STRINGS = {
 	title: 'Hillwheel',
@@ -31,10 +114,10 @@ export const MODE_DESCRIPTIONS = {
 
 // Human labels for each pedal, plus keyboard hints shown on non-touch devices.
 export const PEDAL_LABELS = {
-	throttle: { label: 'GAS', keys: '↑ / W' },
-	brake: { label: 'BRAKE', keys: '↓ / S' },
-	tiltL: { label: '◀ TILT', keys: '← / A' },
-	tiltR: { label: 'TILT ▶', keys: '→ / D' },
+	throttle: { label: 'GAS', get keys() { return keysFor('throttle'); } },
+	brake: { label: 'BRAKE', get keys() { return keysFor('brake'); } },
+	tiltL: { label: '◀ TILT', get keys() { return keysFor('tiltL'); } },
+	tiltR: { label: 'TILT ▶', get keys() { return keysFor('tiltR'); } },
 };
 
 const SETTINGS_KEY = 'hillwheel-settings-v1';
@@ -120,7 +203,7 @@ export function createUi(root, onAction, settings) {
 		showScreen, buildTitle, buildModeSetup, buildSettings, buildHelp,
 		buildPause, buildLeaderboard, buildResults,
 		buildHud, showHud, updateHud, updateMirror, showHint, highlightPedal,
-		showCountdown, announce, applySettings,
+		showCountdown, announce, applySettings, toast,
 	};
 
 	let pedalHandlers = null;
@@ -180,12 +263,19 @@ export function createUi(root, onAction, settings) {
 		syncing: 'syncing…', saving: 'saving…', synced: 'synced', offline: 'offline', error: 'sync error',
 	};
 
-	function buildTitle({ dailyInfo, journeyProgress, firstRun, resumeLabel, touch, profile } = {}) {
+	function buildTitle({ dailyInfo, journeyProgress, firstRun, resumeLabel, touch, profile, account } = {}) {
 		const p = panel(STRINGS.title, STRINGS.tagline);
 		p.querySelector('h1').classList.add('hw-title');
 		if (profile) {
-			p.appendChild(el('p', 'hw-note hw-profile',
-				`${profile.name || '…'} · ${SYNC_LABELS[profile.sync] || profile.sync}`));
+			const line = el('p', 'hw-note hw-profile');
+			if (profile.avatar) {
+				const img = el('img', 'hw-avatar');
+				img.src = profile.avatar;
+				img.alt = '';
+				line.appendChild(img);
+			}
+			line.appendChild(document.createTextNode(`${profile.name || '…'} · ${SYNC_LABELS[profile.sync] || profile.sync}`));
+			p.appendChild(line);
 		}
 		const col = el('div', 'hw-btn-col');
 		const primary = button(firstRun ? 'Quick play — learn the basics' : `Quick play — ${resumeLabel || 'continue'}`, 'hw-btn-primary', () => onAction('quick-play'));
@@ -206,13 +296,36 @@ export function createUi(root, onAction, settings) {
 		p.appendChild(col);
 		p.appendChild(el('p', 'hw-controls-strip', touch
 			? 'Controls: on-screen pedals — GAS, BRAKE, and TILT ◀ ▶ for the air.'
-			: 'Controls: ↑ gas · ↓ brake · ← → tilt in the air · Esc pause'));
+			: `Controls: ${keysFor('throttle', '/')} gas · ${keysFor('brake', '/')} brake · ${keysFor('tiltL', '/')} ${keysFor('tiltR', '/')} tilt in the air · ${keysFor('pause', '/')} pause`));
 		const row = el('div', 'hw-btn-row');
 		row.appendChild(button('Leaderboards', 'hw-btn-small', () => onAction('leaderboard')));
 		row.appendChild(button('Settings', 'hw-btn-small', () => onAction('settings')));
 		row.appendChild(button('How to play', 'hw-btn-small', () => onAction('help')));
+		if (account?.invite) {
+			const b = button(SH_TEXT.invite, 'hw-btn-small', () => onAction('invite'));
+			b.id = 'hw-invite';
+			row.appendChild(b);
+		}
+		if (account?.signIn) {
+			const b = button(SH_TEXT.signIn, 'hw-btn-small', () => onAction('sign-in'));
+			b.id = 'hw-signin';
+			row.appendChild(b);
+		}
 		p.appendChild(row);
 		return p;
+	}
+
+	// Account toast (invite link copied, signed out) — visible over any screen.
+	const toastEl = el('div', 'hw-toast');
+	toastEl.setAttribute('role', 'status');
+	toastEl.hidden = true;
+	root.appendChild(toastEl);
+	let toastTimer = 0;
+	function toast(msg) {
+		toastEl.textContent = msg;
+		toastEl.hidden = false;
+		clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => { toastEl.hidden = true; }, 3500);
 	}
 
 	const MODE_TITLES = {
@@ -404,12 +517,12 @@ export function createUi(root, onAction, settings) {
 		const p = panel('How to play');
 		const grid = el('div', 'hw-help-grid');
 		for (const [h, t] of [
-			['Drive', 'Hold ↑ / W or the GAS pedal to accelerate. ↓ / S or BRAKE slows you down. Coast downhill to save fuel.'],
-			['Balance', 'Only works in the air: ← / A tilts the nose up, → / D tilts it down. Match the slope you are landing on.'],
+			['Drive', `Hold ${keysFor('throttle')} or the GAS pedal to accelerate. ${keysFor('brake')} or BRAKE slows you down. Coast downhill to save fuel.`],
+			['Balance', `Only works in the air: ${keysFor('tiltL')} tilts the nose up, ${keysFor('tiltR')} tilts it down. Match the slope you are landing on.`],
 			['Crashing', 'Landing nose-first, on the roof, or too hard ends the run. Land on both wheels for a smooth-landing bonus.'],
 			['Goal', 'Reach the green flag before the fuel runs out. Yellow flags are checkpoints; yellow cans refill fuel.'],
 			['Score', 'Distance, checkpoints, smooth landings, cans, leftover fuel and time all add up.'],
-			['Pause', 'Esc or P pauses. Practice mode allows undo with U.'],
+			['Pause', `${keysFor('pause', ' or ')} pauses. Practice mode allows undo with ${keysFor('undo', ' or ')}. ${keysFor('recenter', ' or ')} re-centres the camera.`],
 		]) {
 			const c = el('div', 'hw-help-card');
 			c.appendChild(el('h3', null, h));
@@ -454,7 +567,7 @@ export function createUi(root, onAction, settings) {
 	}
 
 	function buildResults({ result, breakdown, won, isDaily, newAchievements, nextLabel, stageName } = {}) {
-		const p = panel(won ? 'Finished!' : 'Run over', isDaily ? 'Daily challenge — ranked' : null);
+		const p = panel(won ? 'Finished!' : 'Run over', isDaily ? 'Daily challenge' : null);
 		if (won && stageName) p.appendChild(el('p', 'hw-note', stageName + ' complete'));
 		const table = el('dl', 'hw-score-table');
 		const rows = [

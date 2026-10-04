@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "test": "node test.js && node --test tests/gfx.test.mjs",
+    "test": "node test.js && node --test tests/gfx.test.mjs tests/platform.test.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "test:review": "node tests/review-fixes.mjs"
   },

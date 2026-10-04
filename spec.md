@@ -24,8 +24,9 @@ green flag before the tank runs dry.
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | Entry point; importmap for `three` and `three/addons/`, mounts `#app`, loads `bootstrap.js` as a module |
-| `bootstrap.js` | Capability detection (WebGL/touch/gamepad/DPR/reduced-motion), launch-token read, asset manifest, `createGame` |
+| `index.html` | Entry point; importmap for `three` and `three/addons/`, mounts `#app`, loads `starhermit-sdk.js` then `bootstrap.js` as a module |
+| `starhermit-sdk.js` | Shared StarHermit client (`window.StarHermit`), an unmodified copy of `tools/starhermit-sdk.js` |
+| `bootstrap.js` | Capability detection (WebGL/touch/gamepad/DPR/reduced-motion), `StarHermit.init()`, asset manifest, `createGame` |
 | `game.js` | Orchestrator: phase machine, fixed-timestep loop, input mapping, coaching, achievements, progression, results |
 | `rules.js` | Pure rules: terrain, physics step, legality, scoring, hashing, commands, terminal states. No DOM, no timers |
 | `content.js` | Versioned content: 5 themes, 5 lessons, 40 journey stages, 4 challenges, daily derivation, offline validators |
@@ -36,13 +37,14 @@ green flag before the tank runs dry.
 | `vendor/three/addons/` | three.js r185 (0.185.1) addons: EffectComposer + Render/Shader/Output/GTAO/UnrealBloom/SMAA passes, FXAA, RoomEnvironment, RoundedBoxGeometry, and the shaders they import |
 | `ui.js` | DOM shell: screens, HUD, pedals, settings/progress persistence, live region, strings |
 | `audio.js` | Web Audio buses, clip playback with synth fallback, engine hum, music, wind ambience |
-| `platform.js` | StarHermit REST adapter: launch-token lifecycle, profile nickname, zip cloud-save slot, read-only leaderboards, time sync, retries/rate limits, telemetry consent |
+| `platform.js` | StarHermit adapter over the SDK (profile/avatar, cloud save, settings KV, key bindings, invite link, read-only leaderboard, sign-in) plus signed-in time sync; no network at all standalone; telemetry consent |
 | `server.js` | Optional authoritative StarHermit game script: static serving + `/api/v1/*`, replay-validated scores |
 | `style.css` | All presentation: palette, layout, responsive breakpoints, a11y variants |
 | `test.js` | Rules/replay/fuzz/content/server suite — `npm test` |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI, desktop + mobile — `npm run test:e2e` |
 | `tests/review-fixes.mjs` | Regression checks for settings persistence and countdown/restart |
 | `tests/gfx.test.mjs` | `node --test` unit tests for `gfx.js` and the graphics string catalogue (run by `npm test`) |
+| `tests/platform.test.mjs` | `node --test` unit tests for `platform.js` over the SDK with a stubbed fetch (run by `npm test`) |
 | `smoke.js` | Legacy browser smoke test against `server.js` (superseded by `tests/e2e.mjs`) |
 | `sfx/` | 17 Opus clips + `manifest.txt` (canonical), `manifest.json` (regeneration), `manifest.md` |
 | `assets/keyart.webp` | Title-screen key art |
@@ -456,42 +458,60 @@ English for German. This is not implemented (§17).
 ## 12. StarHermit integration
 
 Conventions from https://wiki.starhermit.com/. `starhermit.txt` declares `name=Hillwheel`,
-`launch=index.html`, `owner`, `server=server.js`, `cover=coverart.png`.
+`launch=index.html`, `owner`, `server=server.js`, `cover=coverart.png`, and the keyboard
+actions `control.throttle=ArrowUp+KeyW`, `brake=ArrowDown+KeyS`, `tiltL=ArrowLeft+KeyA`,
+`tiltR=ArrowRight+KeyD`, `pause=Escape+KeyP`, `undo=KeyU`, `recenter=KeyC`.
 
-**Used by the client (`platform.js`).**
+**Used by the client (`platform.js` over `starhermit-sdk.js`).** The SDK loads before
+`bootstrap.js`, which calls `StarHermit.init()` first thing.
 
-- **Launch token** — read once from the `#game_token=` URL fragment (query-param and injected-
-  global fallbacks are local-dev only), stripped from the URL, decoded for `sub` and
-  `game_scope`, sent as a bearer header on every call, held in memory only and never persisted,
-  and re-minted every 45 min via `POST /api/v1/games/{slug}/launch-token` (60 s retry on failure).
-- **Profile** — `GET /api/v1/users/{sub}/profile` supplies the nickname (never `/api/v1/me`, never
-  usernames; `"Player " + id8` fallback), shown with the cloud sync status on the title screen.
-- **Server time** — `GET /api/v1/time` sets the RTT-adjusted clock offset and the UTC date the
-  Daily is derived from.
-- **Cloud save** — one slot, `GET`/`PUT /api/v1/me/cloud-saves/{slug}` as zip+base64; the remote
-  doc wins at load, pushes debounce ~2 s and flush on `pagehide`/`visibilitychange`, and
-  `localStorage` remains the offline cache.
-- **Leaderboards (read-only)** — `GET /api/v1/games/{slug}` → `leaderboardId`, then
-  `GET /api/v1/leaderboards/{leaderboardId}/entries` (top 20, nicknames resolved via the profile
-  route). Without a `leaderboardId` the screen shows its unavailable state.
+- **Launch token** — the SDK reads it from `#game_token=` (or the `#access_token=` sign-in
+  return), strips it from the URL, takes the slug from `game_scope`, sends it as a bearer header
+  and renews it before expiry. If renewal is refused a toast says the player is signed out, the
+  profile line disappears and play continues locally.
+- **Sign-in** — on `<id>.starhermit.com` without a token the title shows **Sign in with
+  StarHermit**; hidden when signed in and when running locally.
+- **Profile** — the profile nickname (never `/api/v1/me`, never usernames; `"Player " + id`
+  fallback) and avatar are shown with the cloud sync status on the title screen.
+- **Server time** — signed in only, `GET /api/v1/time` sets the RTT-adjusted clock offset and the
+  UTC date the Daily is derived from. Standalone uses the local clock and makes no request.
+- **Cloud save** — the slot `game:<slug>` via the SDK; the remote doc wins at load, pushes
+  debounce ~2 s and flush with keepalive on `pagehide`/`visibilitychange`, and `localStorage`
+  remains the offline cache.
+- **Settings KV** — every settings change (volumes, mute, graphics, reduced motion, hold/toggle,
+  left-handed pedals, telemetry consent …) is mirrored with `patchSettings` (600 ms debounce);
+  at start the platform values are applied over the local ones.
+- **Controls** — `keydown`/`keyup` route by `event.code` through `StarHermit.loadBindings`; the
+  pedal key hints, the title controls strip, the coaching lines and How to play show the
+  effective keys.
+- **Invite link** — **Invite a friend** on the title (signed in only) copies
+  `StarHermit.inviteLink()` and confirms with a toast.
+- **Leaderboards (read-only)** — the first platform board (`StarHermit.leaderboard()`, top 20,
+  nicknames via the profile route). Without one the screen shows its unavailable state. Standalone
+  the screen lists the player's own best Daily scores (`progress.dailyBest`, top 20, local).
 - **Telemetry consent** — off by default, a settings checkbox, and the event allow-list is
   fixed (`start`, `tutorial_step`, `round_end`, `retry`, `settings_change`, `error`). The client
   sends nothing in any mode; events are only filtered through that allow-list.
 
-**Deliberately local in the client**: achievement unlocks (part of the progress doc, mirrored by
-the cloud save — no platform entitlement or script), ranked score submission (script-owned; the
-replay-validated endpoint lives on the local dev server, wired as an authenticated best-effort
-call with graceful fallback), and presence/activity (no per-game platform routes; hosted mode
-never issues those requests). Progress, settings and achievements persist in `localStorage`.
+Account strings (sign-in, invite, toasts) are localized in the nine locales (`SH_TEXT` in
+`ui.js`, locale from `pickLocale`).
 
-**Implemented by the game script (`server.js`)** for hosts that do run it: static serving with
+**Deliberately local in the client**: achievement unlocks (part of the progress doc, mirrored by
+the cloud save), Daily bests (kept per date in the progress doc; there is no score submission),
+and presence/activity (no request is issued). Standalone (no launch token) the client makes no
+request to any `/api` or `/ws` route.
+
+**Implemented by `server.js`** (the local dev server; the client no longer calls these routes,
+only `test.js` exercises them): static serving with
 `tests/`, `tools/` and dotfiles refused; `/api/v1/time`; `/api/v1/daily`; `/api/v1/scores` with
 **server-side replay validation** (ruleset 2 and content version 2.0.0 enforced, the submitted
 command log re-simulated, hashes and breakdown compared before an entry is accepted);
 `/api/v1/leaderboard` ordered by `compareResults`; `/api/v1/achievements`; `/api/v1/save`;
 presence/activity stubs; telemetry sink; per-IP token-bucket rate limiting; 256 KB body cap.
 
-**Not used at all:** multiplayer sessions, matchmaking, chat, friends, in-game purchase.
+**Not used:** `server.js` is not a platform game script, so platform sessions, matchmaking,
+session invites, chat, replays and platform achievements have nothing to drive them; no realtime
+rooms, voice or in-game purchase.
 
 ---
 
@@ -540,19 +560,23 @@ malformed commands; deterministic replay of recorded sessions plus fuzzed input 
 snapshots; content validation of all 5 lessons, 40 stages, 4 challenges and a 7-day daily window;
 and a live `server.js` API smoke covering time, daily, score validation, leaderboard, achievements
 and saves.
-`npm test` then runs `node --test tests/gfx.test.mjs`: GPU-string detection (including the
-mobile cap), `resolve()` with Auto/preset/overrides/scale clamping, preset-clears-overrides, cost
-summary and the nine-locale string catalogue.
+`npm test` then runs `node --test tests/gfx.test.mjs tests/platform.test.mjs`: GPU-string
+detection (including the mobile cap), `resolve()` with Auto/preset/overrides/scale clamping,
+preset-clears-overrides, cost summary and the nine-locale string catalogue; and `platform.js`
+over the SDK with a stubbed fetch — token read and stripped, nickname, cloud save round-trip
+through `game:<slug>`, settings PATCH, bindings overrides, invite link, Bearer on every call,
+zero fetches standalone, sign-in offered on the hosted domain.
 
 **`npm run test:e2e` (`tests/e2e.mjs`).** Desktop 1280×800 then a fresh mobile 390×844 touch
 context: title visible, settings open/toggle/close, help round-trip, Graphics section (Auto is Low
 on the software GPU; Low → Ultra → High through the visible select, a Bloom override, the
 frame-rate toggle by keyboard, no horizontal cut-off, persistence across a reload, Auto clears
-overrides; zero console errors or warnings), leaderboard degrades
-gracefully offline, journey list shows 40 stages with the correct unlock state, a stage driven
+overrides; zero console errors or warnings), leaderboard shows the local board standalone, journey list shows 40 stages with the correct unlock state, a stage driven
 countdown → active → results with a "Finished!" headline, progression persisted to
 `localStorage`, next stage → pause → resume → quit, practice with undo available, and on mobile
-the on-screen pedals actually moving the vehicle. **Any console error fails the run** (only
+the on-screen pedals actually moving the vehicle; then StarHermit: standalone makes zero same-origin
+`/api` or `/ws` requests (whole pass) and shows no account buttons, and a `#game_token=` launch against a stubbed API shows the
+nickname, strips the token, loads `game:<slug>`, and Invite a friend shows a toast. **Any console error fails the run** (only
 known GPU/swiftshader noise is filtered).
 
 **`npm run test:review` (`tests/review-fixes.mjs`).** Settings survive a reload and are re-applied;
@@ -610,9 +634,9 @@ than a wiring change.
 - **Localization is not implemented** — the game ships English only (§10), except the Graphics
   settings section, which is localized in all nine locales.
 - **Ranked daily submission needs a platform game script**, which this game does not ship: on the
-  production host the daily leaderboard is read-only client-side, and replay-validated score
-  submission works only against the local dev server (`server.js`). Achievements stay local,
-  mirrored by the cloud save.
+  production host the daily leaderboard is read-only client-side and the client submits no
+  scores (the replay-validated endpoint in `server.js` is exercised only by `test.js`).
+  Achievements and Daily bests stay local, mirrored by the cloud save.
 - **The engine hum is synthesized**, not an authored loop, so it is thinner than the one-shots.
 - **Trees and rocks are decoration only** — nothing off the centre line is collidable.
 - **The vehicle has no suspension model**: the body angle is aligned to the slope rather than

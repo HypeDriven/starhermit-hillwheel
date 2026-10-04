@@ -11,14 +11,8 @@
  * Server note: the repo's server.js is a StarHermit authoritative game
  * script, so it is NOT used here. This test embeds a minimal node:http static
  * server on an ephemeral port. No launch token is present, so the game runs
- * unhosted: it probes GET /api/v1/time (stubbed) and may best-effort call the
- * local-dev routes (leaderboard read; daily score submission after a daily
- * run), which the stub answers with 404 — a 404 on those optional capability
- * routes is the game's dev-server probe failing gracefully (it is remembered
- * and never retried), not a defect, so resource 404s under /api/v1/ are
- * filtered out of the console-error assertion below. Hosted-mode routes
- * (profile, cloud saves, platform leaderboards, token refresh) are only
- * exercised when a launch token exists, i.e. not in this harness.
+ * standalone and must make zero same-origin /api or /ws requests (asserted
+ * across the whole standalone pass); the launch-token step stubs the API.
  *
  * Run: npm run test:e2e
  */
@@ -27,17 +21,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { launchToken, stubStarHermit } from './starhermit-e2e.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SHOT = (stage, vp) => `/tmp/hillwheel-e2e-${stage}-${vp}.png`;
 
 // Benign GPU/swiftshader console noise (from tools/production_game_audit.mjs).
 const browserNoise = /GL Driver Message|GPU stall due to ReadPixels|Automatic fallback to software WebGL|EnableWebGLDeveloperExtensions/i;
-// The game probes optional local-dev capability routes (e.g. its own leaderboard)
-// which this stub answers with 404; that handled probe is not a page defect. Asset
-// or module 404s outside /api/v1/ still fail the run.
-const apiProbe404 = (m) => /Failed to load resource/.test(m.text()) && (m.location()?.url || '').includes('/api/v1/');
-
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -50,11 +40,6 @@ const MIME = {
 function startServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    if (url.pathname === '/api/v1/time') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ serverTime: Date.now(), date: new Date().toISOString().slice(0, 10), version: 'e2e' }));
-      return;
-    }
     if (url.pathname.startsWith('/api/')) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not_found' }));
@@ -162,11 +147,16 @@ async function runPass(browser, base, vp) {
     viewport: isMobile ? { width: 390, height: 844 } : { width: 1280, height: 800 },
     hasTouch: isMobile,
   });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage();
   const errors = [];
+  // Standalone (no launch token) must not touch any own-server route.
+  const ownServer = [];
+  const onRequest = (r) => { const u = new URL(r.url()); if (u.origin === new URL(base).origin && /^\/(api|ws)(\/|$)/.test(u.pathname)) ownServer.push(r.method() + ' ' + u.pathname); };
+  page.on('request', onRequest);
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text()) && !apiProbe404(m)) errors.push(`console ${m.type()}: ${m.text()}`);
+    if ((m.type() === 'error' || m.type() === 'warning') && !browserNoise.test(m.text())) errors.push(`console ${m.type()}: ${m.text()}`);
   });
 
   const step = async (name, fn) => { await fn(); console.log(`ok - [${vp}] ${name}`); };
@@ -260,7 +250,7 @@ async function runPass(browser, base, vp) {
       await page.waitForFunction(() => window.__hillwheel?.phase === 'title');
     });
 
-    await step('leaderboard degrades gracefully offline', async () => {
+    await step('leaderboard shows the local board standalone', async () => {
       await page.click('button:has-text("Leaderboards")');
       // The adapter resolves asynchronously (offline probe), so wait for the
       // settled note rather than the transient 'Loading…' state.
@@ -369,6 +359,25 @@ async function runPass(browser, base, vp) {
         await page.screenshot({ path: SHOT('back-to-title', vp) });
       });
     }
+
+    await step('StarHermit: standalone makes no /api or /ws calls; launch token -> nickname, invite toast', async () => {
+      await page.goto(base + '/index.html', { waitUntil: 'networkidle' });
+      await page.waitForFunction(() => window.__hillwheel?.phase === 'title');
+      if (await page.locator('#hw-invite, #hw-signin').count()) throw new Error('account buttons shown standalone');
+      if (ownServer.length) throw new Error('standalone requested ' + ownServer.join(', '));
+      page.off('request', onRequest);
+      const calls = await stubStarHermit(page);
+      await page.goto(base + '/?sh=1#game_token=' + launchToken(), { waitUntil: 'load' });
+      await page.waitForFunction(() => /Al/.test(document.querySelector('.hw-profile')?.textContent || ''));
+      if (page.url().includes('game_token')) throw new Error('token left in URL');
+      await page.locator('#hw-invite').click();
+      await page.locator('.hw-toast').waitFor({ state: 'visible' });
+      const box = await page.locator('.hw-toast').boundingBox();
+      if (box.x < 0 || box.x + box.width > page.viewportSize().width + 1) throw new Error('toast cut off');
+      if (!calls.some((c) => c.includes('/cloud-saves/game%3Agid-1'))) throw new Error('no cloud-save load: ' + calls.join(', '));
+      await page.screenshot({ path: SHOT('signed-in', vp) });
+      await page.unroute(/\/api\/v1\//);
+    });
   } finally {
     if (errors.length) {
       console.log(`PAGE ERRORS (${vp}):\n` + errors.join('\n'));
