@@ -10,6 +10,9 @@ body {
 }
 
 .hw-root { position: fixed; inset: 0; display: flex; flex-direction: column; }
+/* Large screens: the DOM UI layers zoom by --ui-scale (ui-scale.js, 1 up to 1600x1000) with their vh/vw divided
+   by it; the full-viewport 3D canvas is not zoomed. */
+.hw-hud, .hw-screen-layer, .hw-countdown, .hw-toast, .hw-fps { zoom: var(--ui-scale, 1); }
 
 /* Canvas fills the game region but is never the only UI. */
 .hw-canvas-wrap { position: absolute; inset: 0; }
@@ -71,7 +74,7 @@ body {
 	color: #b8c8bc; font-size: 0.85rem;
 }
 
-.hw-level-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; margin-bottom: 12px; }
+.hw-level-list { display: flex; flex-direction: column; gap: 6px; max-height: calc(50vh / var(--ui-scale, 1)); overflow-y: auto; margin-bottom: 12px; }
 
 /* --- HUD --- */
 .hw-hud {
@@ -135,7 +138,7 @@ body {
 .hw-hud-hint {
 	align-self: center; margin: 0 12px; padding: 10px 18px; border-radius: 10px;
 	background: rgba(12, 20, 16, 0.78); border: 1px solid #f2c14e; color: #f0f4ee;
-	font-size: clamp(1rem, 2.6vw, 1.25rem); font-weight: 600; text-align: center;
+	font-size: clamp(1rem, calc(2.6vw / var(--ui-scale, 1)), 1.25rem); font-weight: 600; text-align: center;
 	max-width: 90%; pointer-events: none;
 }
 
@@ -143,11 +146,11 @@ body {
 	position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
 	text-align: center; width: max-content;
 	background: rgba(12, 20, 16, 0.75); border-radius: 12px; padding: 16px 28px;
-	max-width: min(70ch, calc(100vw - 32px)); pointer-events: none;
+	max-width: min(70ch, calc(calc(100vw / var(--ui-scale, 1)) - 32px)); pointer-events: none;
 }
-.hw-countdown-main { font-size: clamp(1.5rem, 6vw, 3rem); font-weight: 700; line-height: 1.2; }
-.hw-countdown-main.hw-countdown-long { font-size: clamp(1.05rem, 2.8vw, 1.5rem); font-weight: 600; max-width: 34ch; }
-.hw-countdown-hint { margin-top: 8px; font-size: clamp(0.95rem, 2.4vw, 1.15rem); color: #f2c14e; font-weight: 600; }
+.hw-countdown-main { font-size: clamp(1.5rem, calc(6vw / var(--ui-scale, 1)), 3rem); font-weight: 700; line-height: 1.2; }
+.hw-countdown-main.hw-countdown-long { font-size: clamp(1.05rem, calc(2.8vw / var(--ui-scale, 1)), 1.5rem); font-weight: 600; max-width: 34ch; }
+.hw-countdown-hint { margin-top: 8px; font-size: clamp(0.95rem, calc(2.4vw / var(--ui-scale, 1)), 1.15rem); color: #f2c14e; font-weight: 600; }
 
 /* --- Results --- */
 .hw-score-table { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; margin: 12px 0; }
@@ -253,5 +256,11 @@ body {
 }
 /* StarHermit account: avatar in the profile line, confirmation toast */
 .hw-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 8px; }
-.hw-toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 100; max-width: calc(100vw - 32px); padding: 10px 16px; border-radius: 10px; background: rgba(16, 24, 32, 0.94); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); overflow-wrap: anywhere; text-align: center; }
+.hw-toast { position: fixed; left: 50%; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 100; max-width: calc(calc(100vw / var(--ui-scale, 1)) - 32px); padding: 10px 16px; border-radius: 10px; background: rgba(16, 24, 32, 0.94); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); overflow-wrap: anywhere; text-align: center; }
 .hw-toast[hidden] { display: none; }
+/* Phones: bottom-sheet panels and the title's button row sit at the bottom, so the toast drops in from the top;
+   it never takes clicks, so nothing under it is blocked while it is visible. */
+.hw-toast { pointer-events: none; }
+@media (max-width: 640px) and (orientation: portrait), (max-height: 500px) and (orientation: landscape) {
+	.hw-toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; }
+}

@@ -273,6 +273,12 @@ an `abandon` command.
 at 200 px. Portrait ≤640 px: panels become bottom sheets (max 85 % height, scrollable inside),
 pedals ≥72 px tall in the thumb zone, the speed mirror is hidden. Landscape ≤500 px tall: the
 status rail shrinks, key hints are dropped, pedals stay ≥48 px.
+Large screens (above 1600×1000): `ui-scale.js` sets `--ui-scale` on `<html>` (the smaller of width/1600 and
+height/1000, capped at 2.5) and the HUD, screen layer, countdown, toast and frame-rate badge are CSS-`zoom`ed by
+it with their vh/vw lengths divided by it, so panels and pedals grow proportionally; the full-viewport 3D canvas is
+not zoomed.
+The account toast ignores pointer input and sits at the bottom on desktop, at the top on phones (portrait and
+short landscape) so it stays clear of the bottom sheet's and the title's buttons.
 
 **Safe areas.** The screen layer and HUD tray pad with `env(safe-area-inset-*)`; `viewport-fit=cover`
 is set in `index.html`. Nothing that must never be cut off — the pedal tray, the fuel bar, the
