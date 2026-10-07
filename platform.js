@@ -111,8 +111,12 @@ export class PlatformModule {
 	async loadSave() {
 		if (!this.hosted) return { ok: false, error: 'offline', recoverable: true };
 		this._setSync('syncing');
-		const doc = await this.sh.loadJSON();
+		this._loading = true;
+		const doc = await this.sh.loadJSON().finally(() => { this._loading = false; });
 		this._setSync('synced');
+		// A doc held during the load is stale once the remote one is adopted.
+		const held = this._held; this._held = null;
+		if (held && !doc) this.queueSave(held);
 		return { ok: true, doc: doc || null };
 	}
 
@@ -125,6 +129,9 @@ export class PlatformModule {
 	// Debounced mirror (~2 s of quiet), drained with keepalive on pagehide/hidden.
 	queueSave(doc) {
 		if (!this.hosted) return; // local-only play
+		// Held while loadSave runs: a doc queued then would still be PUT after
+		// the remote one is adopted, over the newer cloud save.
+		if (this._loading) { this._held = doc; return; }
 		this._setSync('saving');
 		this.sh.saveJSON(doc);
 	}

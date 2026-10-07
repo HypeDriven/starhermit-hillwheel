@@ -481,7 +481,8 @@ actions `control.throttle=ArrowUp+KeyW`, `brake=ArrowDown+KeyS`, `tiltL=ArrowLef
   fallback) and avatar are shown with the cloud sync status on the title screen.
 - **Server time** — signed in only, `GET /api/v1/time` sets the RTT-adjusted clock offset and the
   UTC date the Daily is derived from. Standalone uses the local clock and makes no request.
-- **Cloud save** — the slot `game:<slug>` via the SDK; the remote doc wins at load, pushes
+- **Cloud save** — the slot `game:<slug>` via the SDK; the remote doc wins at load (a save made
+  while that load runs is held, then dropped if a remote doc was adopted or pushed if not), pushes
   debounce ~2 s and flush with keepalive on `pagehide`/`visibilitychange`, and `localStorage`
   remains the offline cache.
 - **Settings KV** — every settings change (volumes, mute, graphics, reduced motion, hold/toggle,
