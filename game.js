@@ -776,6 +776,20 @@ export class Game {
 			stageName: m?.name, nextLabel,
 		}));
 		this._setPhase('progression', 'saved');
+		if (m?.kind !== 'learn') this._postToLeaderboard(result.breakdown.total);
+	}
+
+	// Signed in only: post the run total and show the player's board rank.
+	_postToLeaderboard(total) {
+		if (!this.platform.hosted) return;
+		const line = this.root.querySelector('.hw-results-lb');
+		if (!line) return;
+		line.hidden = false;
+		line.textContent = SH_TEXT.lbPosting;
+		this.platform.submitScore(total).then((r) => {
+			line.textContent = !r.posted ? SH_TEXT.lbNotPosted
+				: r.rank ? SH_TEXT.lbRank.replace('{rank}', r.rank) : SH_TEXT.lbPosted;
+		});
 	}
 
 	dispose() {

@@ -310,7 +310,7 @@ await testAsync('server endpoints: time, daily, score validation, leaderboard, a
 		const html = await (await fetch(base + '/index.html')).text();
 		assert.ok(html.includes('Hillwheel'));
 		const star = await (await fetch(base + '/starhermit.txt')).text();
-		assert.ok(star.includes('launch=index.html') && star.includes('server=server.js'));
+		assert.ok(star.includes('launch=index.html') && star.includes('server=score-script.js'));
 		// server.js itself must not be served
 		assert.equal((await fetch(base + '/server.js')).status, 404);
 

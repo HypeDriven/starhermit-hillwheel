@@ -87,8 +87,7 @@ export class PlatformModule {
 	}
 
 	// --- Leaderboards (read-only on the platform) ------------------------------------
-	// Clients can never submit to a platform leaderboard. Hosted reads the first
-	// platform board; standalone the game shows the player's local daily bests
+	// Hosted reads the first platform board; standalone the game shows the player's local daily bests
 	// (game.js) and this returns 'offline' without any request.
 	async getLeaderboard() {
 		if (!this.hosted) return { ok: false, error: 'offline', recoverable: true };
@@ -99,6 +98,21 @@ export class PlatformModule {
 			entries.push({ name: await this.nicknameFor(e.userId), score: e.score ?? 0 });
 		}
 		return { ok: true, data: { entries } };
+	}
+
+	// --- Leaderboard posting (score-script.js) -------------------------------------
+	// Signed in only: a finished run's total goes through StarHermit.submitScores to
+	// the high-score board. Resolves { posted, rank } (rank or null); no request standalone.
+	async submitScore(total) {
+		if (!this.hosted) return { posted: false, rank: null };
+		let keys = [];
+		try { keys = await this.sh.submitScores({ 'high-score': total }); } catch { keys = []; }
+		if (!keys.includes('high-score')) return { posted: false, rank: null };
+		try {
+			const r = await this.sh.leaderboard('high-score', { pageSize: 100 });
+			const me = (r?.items || []).find((i) => i.userId === this.sh.userId);
+			return { posted: true, rank: me ? me.rank : null };
+		} catch { return { posted: true, rank: null }; }
 	}
 
 	// --- Achievements (local) -----------------------------------------------------------

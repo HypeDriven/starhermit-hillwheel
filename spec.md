@@ -38,7 +38,8 @@ green flag before the tank runs dry.
 | `ui.js` | DOM shell: screens, HUD, pedals, settings/progress persistence, live region, strings |
 | `audio.js` | Web Audio buses, clip playback with synth fallback, engine hum, music, wind ambience |
 | `platform.js` | StarHermit adapter over the SDK (profile/avatar, cloud save, settings KV, key bindings, invite link, read-only leaderboard, sign-in) plus signed-in time sync; no network at all standalone; telemetry consent |
-| `server.js` | Optional authoritative StarHermit game script: static serving + `/api/v1/*`, replay-validated scores |
+| `score-script.js` | StarHermit platform script (`server=`): range-checks a finished run's total and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
+| `server.js` | Local dev server: static serving + `/api/v1/*`, replay-validated scores |
 | `style.css` | All presentation: palette, layout, responsive breakpoints, a11y variants |
 | `test.js` | Rules/replay/fuzz/content/server suite — `npm test` |
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI, desktop + mobile — `npm run test:e2e` |
@@ -464,7 +465,7 @@ English for German. This is not implemented (§17).
 ## 12. StarHermit integration
 
 Conventions from https://wiki.starhermit.com/. `starhermit.txt` declares `name=Hillwheel`,
-`launch=index.html`, `owner`, `server=server.js`, `cover=coverart.png`, and the keyboard
+`launch=index.html`, `owner`, `server=score-script.js`, `cover=coverart.png`, and the keyboard
 actions `control.throttle=ArrowUp+KeyW`, `brake=ArrowDown+KeyS`, `tiltL=ArrowLeft+KeyA`,
 `tiltR=ArrowRight+KeyD`, `pause=Escape+KeyP`, `undo=KeyU`, `recenter=KeyC`.
 
@@ -493,18 +494,22 @@ actions `control.throttle=ArrowUp+KeyW`, `brake=ArrowDown+KeyS`, `tiltL=ArrowLef
   effective keys.
 - **Invite link** — **Invite a friend** on the title (signed in only) copies
   `StarHermit.inviteLink()` and confirms with a toast.
-- **Leaderboards (read-only)** — the first platform board (`StarHermit.leaderboard()`, top 20,
+- **Leaderboard posting** — signed in, every finished run except Learn lessons posts its total
+  through `StarHermit.submitScores` (a practice session whose `score-script.js` posts it to the
+  `high-score` board, integer, higher is better, 0–20,000), and the results screen shows
+  "Leaderboard rank: #N" (or posted / not posted). Standalone posts nothing and shows no line.
+- **Leaderboards screen** — the first platform board (`StarHermit.leaderboard()`, top 20,
   nicknames via the profile route). Without one the screen shows its unavailable state. Standalone
   the screen lists the player's own best Daily scores (`progress.dailyBest`, top 20, local).
 - **Telemetry consent** — off by default, a settings checkbox, and the event allow-list is
   fixed (`start`, `tutorial_step`, `round_end`, `retry`, `settings_change`, `error`). The client
   sends nothing in any mode; events are only filtered through that allow-list.
 
-Account strings (sign-in, invite, toasts) are localized in the nine locales (`SH_TEXT` in
+Account strings (sign-in, invite, toasts, leaderboard line) are localized in the nine locales (`SH_TEXT` in
 `ui.js`, locale from `pickLocale`).
 
 **Deliberately local in the client**: achievement unlocks (part of the progress doc, mirrored by
-the cloud save), Daily bests (kept per date in the progress doc; there is no score submission),
+the cloud save), Daily bests (kept per date in the progress doc),
 and presence/activity (no request is issued). Standalone (no launch token) the client makes no
 request to any `/api` or `/ws` route.
 
@@ -516,8 +521,8 @@ command log re-simulated, hashes and breakdown compared before an entry is accep
 `/api/v1/leaderboard` ordered by `compareResults`; `/api/v1/achievements`; `/api/v1/save`;
 presence/activity stubs; telemetry sink; per-IP token-bucket rate limiting; 256 KB body cap.
 
-**Not used:** `server.js` is not a platform game script, so platform sessions, matchmaking,
-session invites, chat, replays and platform achievements have nothing to drive them; no realtime
+**Not used:** `score-script.js` only posts scores, so platform matchmaking, session invites,
+chat, replays and platform achievements have nothing to drive them; no realtime
 rooms, voice or in-game purchase.
 
 ---
