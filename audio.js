@@ -60,7 +60,7 @@ export class AudioModule {
 				const g = this.ctx.createGain();
 				g.gain.value = this.volumes[name];
 				g.connect(this.master);
-				this.buses[name] = g;
+				this.buses[name] = (globalThis.GameOptions ? globalThis.GameOptions.tagBus(g, name) : g);
 			}
 			return true;
 		} catch { return false; }
@@ -80,7 +80,7 @@ export class AudioModule {
 		if (!this.ctx || this.muted) return;
 		const t0 = this.ctx.currentTime;
 		const detune = variant ? ((variant % 7) - 3) * 12 : 0;
-		const osc = this.ctx.createOscillator();
+		const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createOscillator(), bus) : this.ctx.createOscillator());
 		osc.type = type;
 		osc.frequency.setValueAtTime(freq * Math.pow(2, detune / 1200), t0);
 		if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t0 + dur);
@@ -98,7 +98,7 @@ export class AudioModule {
 		const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
 		const data = buf.getChannelData(0);
 		for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
-		const src = this.ctx.createBufferSource();
+		const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), bus) : this.ctx.createBufferSource());
 		src.buffer = buf;
 		const f = this.ctx.createBiquadFilter();
 		f.type = 'lowpass'; f.frequency.value = freq;
@@ -115,7 +115,7 @@ export class AudioModule {
 		if (!this.ctx || this.muted) return false;
 		const buf = this._sampleBuffers.get(clip);
 		if (buf) {
-			const src = this.ctx.createBufferSource();
+			const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
 			src.buffer = buf;
 			src.connect(this.buses.sfx || this.master);
 			src.start();
@@ -160,7 +160,7 @@ export class AudioModule {
 	setEngine(active, speed = 0, throttle = 0) {
 		if (!this.ctx) return;
 		if (active && !this._engine) {
-			const osc = this.ctx.createOscillator();
+			const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createOscillator(), null) : this.ctx.createOscillator());
 			osc.type = 'sawtooth';
 			const g = this.ctx.createGain(); g.gain.value = 0;
 			const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500;
@@ -213,7 +213,7 @@ export class AudioModule {
 			return;
 		}
 		this._wantAmbience = true;
-		const src = this.ctx.createBufferSource();
+		const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), null) : this.ctx.createBufferSource());
 		src.buffer = buf;
 		src.loop = true;
 		const g = this.ctx.createGain();
