@@ -9,17 +9,29 @@ import { createRender } from './render.js';
 import { createUi, loadSettings, saveSettings, loadProgress, saveProgress, STRINGS, DEFAULT_BINDINGS, setBindings, keysFor, SH_TEXT } from './ui.js';
 import { createAudio } from './audio.js';
 import { createPlatform } from './platform.js';
+import { T, L, bindText } from './i18n.js';
 
 export const GAME_SCHEMA_VERSION = 2;
 export const BUILD_VERSION = '1.0.0';
 
 const ACHIEVEMENTS = [
-	{ key: 'first_finish', name: 'First Finish', check: (c) => c.finished },
-	{ key: 'smooth_operator', name: 'Smooth Operator', check: (c) => c.smoothLandings >= 3 },
-	{ key: 'streak_3', name: 'Hat Trick', check: (c) => c.streak >= 3 },
-	{ key: 'mastery_20', name: 'Hill Veteran', check: (c) => c.stagesCompleted >= 20 },
-	{ key: 'long_haul', name: 'Long Haul', check: (c) => c.totalDistance >= 50000 },
+	{ key: 'first_finish', name: L('First Finish'), check: (c) => c.finished },
+	{ key: 'smooth_operator', name: L('Smooth Operator'), check: (c) => c.smoothLandings >= 3 },
+	{ key: 'streak_3', name: L('Hat Trick'), check: (c) => c.streak >= 3 },
+	{ key: 'mastery_20', name: L('Hill Veteran'), check: (c) => c.stagesCompleted >= 20 },
+	{ key: 'long_haul', name: L('Long Haul'), check: (c) => c.totalDistance >= 50000 },
 ];
+
+// Display names (messages) for content: "Stage n", "Mastery n", "Daily <date>",
+// lesson titles, challenge names and descriptions are translation keys.
+function stageLabel(s) {
+	const m = /^(Stage|Mastery) (\d+)$/.exec(s.name || '');
+	return m ? L(m[1] + ' {n}', { n: m[2] }) : L(s.name);
+}
+function dailyLabel(d) {
+	const m = /^Daily (.+)$/.exec(d.name || '');
+	return m ? L('Daily {date}', { date: m[1] }) : L(d.name);
+}
 
 export class Game {
 	constructor(root, env = {}) {
@@ -50,7 +62,8 @@ export class Game {
 		this.platform = createPlatform(env.platform || {});
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
 		this.platform.onChange = () => this._onPlatformChange();
-		this.platform.onAuth = (signedIn) => { if (!signedIn) this.ui?.toast(SH_TEXT.signedOut); };
+		this.platform.onAuth = (signedIn) => { if (!signedIn) this.ui?.toast(() => SH_TEXT.signedOut); };
+		this.platform.onConflict = (doc) => this._mergeConflict(doc);
 		this.bindings = structuredClone(DEFAULT_BINDINGS);
 		this.platform.loadBindings(DEFAULT_BINDINGS).then((b) => {
 			this.bindings = b;
@@ -103,7 +116,8 @@ export class Game {
 		this.ui.screenLayer.innerHTML = '';
 		const s = document.createElement('section');
 		s.className = 'hw-panel';
-		s.innerHTML = '<h1>Hillwheel</h1><p>This game needs WebGL, which your browser or device has disabled. Your settings and progress are saved and will be here when WebGL is available.</p>';
+		s.innerHTML = '<h1>Hillwheel</h1><p></p>';
+		bindText(s.querySelector('p'), L('This game needs WebGL, which your browser or device has disabled. Your settings and progress are saved and will be here when WebGL is available.'));
 		this.ui.screenLayer.appendChild(s);
 		this.ui.screenLayer.classList.remove('hidden');
 		this._setPhase('title', 'no_webgl');
@@ -121,9 +135,9 @@ export class Game {
 		const stage = content.getStage(this.progress.lastStage || 0);
 		this.ui.showScreen('title', this.ui.buildTitle({
 			dailyInfo: this._dailyInfo || null,
-			journeyProgress: `${done}/${content.STAGES.length} stages`,
+			journeyProgress: L('{done}/{total} stages', { done, total: content.STAGES.length }),
 			firstRun: this._isFirstRun(),
-			resumeLabel: stage.name,
+			resumeLabel: stageLabel(stage),
 			touch: this.touchOnly,
 			profile: this._profileStatus(),
 			account: { invite: this.platform.hosted, signIn: this.platform.canSignIn() },
@@ -160,6 +174,30 @@ export class Game {
 		if (this.phase === 'title') this._showTitle();
 	}
 
+	// Cloud-save conflict: another device saved since our load. Keep the best of
+	// both — higher score per completed stage, union of lessons and achievements,
+	// furthest stage reached, longer totals, best daily per date — keep this
+	// device's settings and the run in progress, then save the merged doc.
+	_mergeConflict(doc) {
+		const r = doc && doc.progress;
+		if (r && typeof r === 'object') {
+			const p = this.progress;
+			for (const [id, score] of Object.entries(r.stagesCompleted || {})) p.stagesCompleted[id] = Math.max(p.stagesCompleted[id] || 0, Number(score) || 0);
+			for (const id of r.tutorialDone || []) if (!p.tutorialDone.includes(id)) p.tutorialDone.push(id);
+			for (const k of r.achievements || []) if (!p.achievements.includes(k)) p.achievements.push(k);
+			p.lastStage = Math.max(p.lastStage || 0, Number(r.lastStage) || 0);
+			p.totalDistance = Math.max(p.totalDistance || 0, Number(r.totalDistance) || 0);
+			p.runsPlayed = Math.max(p.runsPlayed || 0, Number(r.runsPlayed) || 0);
+			if (r.dailyBest) {
+				const best = p.dailyBest || (p.dailyBest = {});
+				for (const [id, score] of Object.entries(r.dailyBest)) best[id] = Math.max(best[id] || 0, Number(score) || 0);
+			}
+			this.totalDistance = Math.max(this.totalDistance, p.totalDistance);
+		}
+		this._persistProgress();
+		if (this.phase === 'title') this._showTitle();
+	}
+
 	// Per-player settings KV: platform values win over the local ones when signed in.
 	async _loadPlatformSettings() {
 		const remote = await this.platform.getSettings();
@@ -189,7 +227,7 @@ export class Game {
 	_inviteFriend() {
 		const link = this.platform.inviteLink();
 		if (!link) return;
-		const done = (ok) => this.ui.toast(ok ? SH_TEXT.copied : SH_TEXT.copyFailed.replace('{link}', link));
+		const done = (ok) => this.ui.toast(ok ? () => SH_TEXT.copied : () => SH_TEXT.copyFailed.replace('{link}', link));
 		try { navigator.clipboard.writeText(link).then(() => done(true), () => done(false)); } catch { done(false); }
 	}
 
@@ -239,7 +277,7 @@ export class Game {
 		const tutDone = this.progress.tutorialDone;
 		if (mode === 'journey') {
 			const levels = content.STAGES.map((s, i) => ({
-				label: `${s.name}${s.mastery ? ' ★' : ''}${done[s.id] ? ` ✓ ${done[s.id]}` : ''}`,
+				label: () => `${stageLabel(s)()}${s.mastery ? ' ★' : ''}${done[s.id] ? ` ✓ ${done[s.id]}` : ''}`,
 				done: !!done[s.id], locked: i > 0 && !done[content.STAGES[i - 1].id] && i > (this.progress.lastStage || 0) + 1,
 			}));
 			this.ui.showScreen('setup', this.ui.buildModeSetup({
@@ -248,7 +286,7 @@ export class Game {
 			}));
 		} else if (mode === 'learn') {
 			const levels = content.TUTORIALS.map((t) => ({
-				label: `${t.title}${tutDone.includes(t.id) ? ' ✓' : ''}`, done: tutDone.includes(t.id),
+				label: () => `${T(t.title)}${tutDone.includes(t.id) ? ' ✓' : ''}`, done: tutDone.includes(t.id),
 			}));
 			this.ui.showScreen('setup', this.ui.buildModeSetup({
 				mode, levels, ranked: false,
@@ -257,17 +295,17 @@ export class Game {
 		} else if (mode === 'daily') {
 			const d = this._daily || content.dailyContent(new Date().toISOString().slice(0, 10));
 			this.ui.showScreen('setup', this.ui.buildModeSetup({
-				mode, levels: [{ label: `${d.name} — ranked` }], ranked: true,
+				mode, levels: [{ label: L('{name} — ranked', { name: dailyLabel(d) }) }], ranked: true,
 				onPick: () => this._startDaily(d),
 			}));
 		} else if (mode === 'practice') {
-			const levels = ['Easy hills', 'Rolling hills', 'Steep hills', 'Wild hills'].map((label, i) => ({ label }));
+			const levels = [L('Easy hills'), L('Rolling hills'), L('Steep hills'), L('Wild hills')].map((label) => ({ label }));
 			this.ui.showScreen('setup', this.ui.buildModeSetup({
 				mode, levels, ranked: false,
 				onPick: (i) => this._startPractice(i),
 			}));
 		} else if (mode === 'challenge') {
-			const levels = content.CHALLENGES.map((c) => ({ label: `${c.name} — ${c.desc}` }));
+			const levels = content.CHALLENGES.map((c) => ({ label: L('{name} — {desc}', { name: L(c.name), desc: L(c.desc) }) }));
 			this.ui.showScreen('setup', this.ui.buildModeSetup({
 				mode, levels, ranked: false,
 				onPick: (i) => this._startChallenge(i),
@@ -314,13 +352,13 @@ export class Game {
 			this._setPhase('active', 'countdown_done');
 			this.audio.startMusic();
 			this.audio.startAmbience();
-			this.ui.announce('Go! ' + this._gasVerb() + ' to drive.');
+			this.ui.announce(T('Go! {verb} to drive.', { verb: this._gasVerb() }));
 			// Keep the "how do I move" prompt up until the first press of the throttle.
 			this.coach.active = 'gas';
-			this.ui.showHint(this._gasVerb() + ' to drive');
+			this.ui.showHint(() => T('{verb} to drive', { verb: this._gasVerb() }));
 			return;
 		}
-		this.ui.showCountdown(n === 3 ? (this.levelMeta.intro || String(n)) : String(n), 'Get ready: ' + this._gasVerb().replace(/^./, (ch) => ch.toLowerCase()) + ' to drive');
+		this.ui.showCountdown(n === 3 && this.levelMeta.intro ? L(this.levelMeta.intro) : String(n), () => T('Get ready: {verb} to drive', { verb: this._gasVerb() }));
 		this.audio.event('countdown');
 		setTimeout(() => { if (this.phase === 'countdown') this._countdown(n - 1, token); }, this.levelMeta.intro && n === 3 ? 1600 : 900);
 	}
@@ -329,26 +367,26 @@ export class Game {
 		const s = content.getStage(i);
 		this.progress.lastStage = i;
 		this._persistProgress();
-		this._prepare(content.levelConfig(s, 'journey'), { kind: 'journey', index: i, id: s.id, theme: s.theme, name: s.name });
+		this._prepare(content.levelConfig(s, 'journey'), { kind: 'journey', index: i, id: s.id, theme: s.theme, name: stageLabel(s) });
 	}
 
 	_startTutorial(i) {
 		const t = content.TUTORIALS[i];
-		this._prepare(content.tutorialConfig(t), { kind: 'learn', index: i, id: t.id, theme: 'meadow', name: t.title, intro: t.text, tutorial: t });
+		this._prepare(content.tutorialConfig(t), { kind: 'learn', index: i, id: t.id, theme: 'meadow', name: L(t.title), intro: t.text, tutorial: t });
 	}
 
 	_startDaily(d) {
-		this._prepare(content.levelConfig(d, 'daily'), { kind: 'daily', id: d.id, theme: d.theme, name: d.name });
+		this._prepare(content.levelConfig(d, 'daily'), { kind: 'daily', id: d.id, theme: d.theme, name: dailyLabel(d) });
 	}
 
 	_startPractice(i) {
 		const cfg = { seed: (0x9ac0 + i * 977) >>> 0, length: 300 + i * 120, roughness: 0.5 + i * 0.35, fuel: 100, fuelCans: 2 + i, checkpoints: 2, mode: 'practice' };
-		this._prepare(cfg, { kind: 'practice', index: i, id: 'practice-' + i, theme: content.THEMES[i % content.THEMES.length].id, name: 'Practice' });
+		this._prepare(cfg, { kind: 'practice', index: i, id: 'practice-' + i, theme: content.THEMES[i % content.THEMES.length].id, name: L('Practice') });
 	}
 
 	_startChallenge(i) {
 		const c = content.CHALLENGES[i];
-		this._prepare(content.levelConfig(c.config, 'challenge'), { kind: 'challenge', id: c.id, theme: 'ember', name: c.name });
+		this._prepare(content.levelConfig(c.config, 'challenge'), { kind: 'challenge', id: c.id, theme: 'ember', name: L(c.name) });
 	}
 
 	_restartLevel() {
@@ -410,10 +448,10 @@ export class Game {
 		const res = this.session.undo();
 		if (res.ok) {
 			this.prevVehicle = { ...this.session.state.vehicle };
-			this.ui.announce('Undone');
+			this.ui.announce(T('Undone'));
 			this._resume();
 		} else {
-			this.ui.announce('Nothing to undo', true);
+			this.ui.announce(T('Nothing to undo'), true);
 			this.audio.event('invalid');
 		}
 	}
@@ -435,13 +473,8 @@ export class Game {
 		this.render?.setGraphics(this.settings.graphics || {});
 		this.render?.setReducedMotion(!!this.settings.reducedMotion);
 		this.platform.telemetryConsent = !!this.settings.telemetryConsent;
-		if (this.phase === 'paused') {
-			this.ui.showScreen('pause', this.ui.buildPause({
-				settings: this.settings, canUndo: this.mode === 'practice',
-				onSettings: (p) => this._updateSettings(p),
-				gfx: this._gfxApi(),
-			}));
-		}
+		// The pause panel's controls already show the new values; it is not rebuilt,
+		// so focus, scroll and the shared options sections mounted in it stay put.
 		this.platform.track('settings_change');
 		this._mirrorSettings();
 	}
@@ -466,8 +499,8 @@ export class Game {
 	// Standalone board: the player's own best Daily scores, newest dates first on ties.
 	_localBoard() {
 		const entries = Object.entries(this.progress.dailyBest || {})
-			.map(([id, score]) => ({ name: `Daily ${id.replace(/^daily-/, "")}`, score }))
-			.sort((x, y) => y.score - x.score || (x.name < y.name ? 1 : -1))
+			.map(([id, score]) => ({ date: id.replace(/^daily-/, ''), name: L('Daily {date}', { date: id.replace(/^daily-/, '') }), score }))
+			.sort((x, y) => y.score - x.score || (x.date < y.date ? 1 : -1))
 			.slice(0, 20);
 		return { ok: true, data: { entries } };
 	}
@@ -525,8 +558,8 @@ export class Game {
 
 	_gasVerb() {
 		const hold = this.settings.holdToDrive !== false;
-		if (this.touchOnly) return hold ? 'Hold GAS' : 'Tap GAS';
-		return (hold ? 'Hold ' : 'Tap ') + keysFor('throttle', ' or ');
+		if (this.touchOnly) return hold ? T('Hold GAS') : T('Tap GAS');
+		return T(hold ? 'Hold {keys}' : 'Tap {keys}', { keys: keysFor('throttle', ' ' + T('or') + ' ') });
 	}
 
 	_clearHint() { this.coach.active = null; this.ui.showHint(null); }
@@ -545,15 +578,15 @@ export class Game {
 		// Stopped with no throttle for a second and a half: remind how to move.
 		if (c.throttled && v.grounded && Math.abs(v.vx) < 0.5 && !this.input.throttle) {
 			c.idle++;
-			if (c.idle === 90 && !c.active) this._hint('idle', this._gasVerb() + ' to get going', 2500);
+			if (c.idle === 90 && !c.active) this._hint('idle', () => T('{verb} to get going', { verb: this._gasVerb() }), 2500);
 		} else c.idle = 0;
 		if (fresh && !c.airHint && !v.grounded && state.airTime > 0.35 && !this.input.tilt && (!c.active || c.active === 'idle')) {
 			c.airHint = true;
-			this._hint('air', (this.touchOnly ? 'In the air: TILT ◀ ▶' : `In the air: ${keysFor('tiltL', '/')} ${keysFor('tiltR', '/')} tilt`) + ' to match the slope', 2500);
+			this._hint('air', () => (this.touchOnly ? T('In the air: TILT ◀ ▶ to match the slope') : T('In the air: {tiltL} {tiltR} tilt to match the slope', { tiltL: keysFor('tiltL', '/'), tiltR: keysFor('tiltR', '/') })), 2500);
 		}
 		if (!c.fuelHint && v.fuel < (v.fuelMax || 100) * 0.25 && c.active !== 'gas') {
 			c.fuelHint = true;
-			this._hint('fuel', 'Fuel low: ease off downhill and grab the yellow cans', 3000);
+			this._hint('fuel', L('Fuel low: ease off downhill and grab the yellow cans'), 3000);
 		}
 	}
 
@@ -695,7 +728,7 @@ export class Game {
 	_fireEvents(before) {
 		const s = this.session.state;
 		if (s.cansCollected > before.cans) this.audio.event('can', { variant: s.cansCollected });
-		if (s.nextCheckpoint > before.cp) { this.audio.event('checkpoint'); this.ui.announce(`Checkpoint ${s.nextCheckpoint} of ${s.checkpoints.length}`); }
+		if (s.nextCheckpoint > before.cp) { this.audio.event('checkpoint'); this.ui.announce(T('Checkpoint {n} of {total}', { n: s.nextCheckpoint, total: s.checkpoints.length })); }
 		if (s.smoothLandings > before.smooth) this.audio.event('land_smooth');
 		if (!s.vehicle.grounded !== !before.grounded && s.vehicle.grounded && s.smoothLandings === before.smooth) {
 			this.audio.event('land_hard');
@@ -752,7 +785,7 @@ export class Game {
 				this.progress.achievements.push(a.key);
 				newAch.push(a.name);
 				this.audio.event('achievement');
-				this.ui.announce(`Achievement unlocked: ${a.name}`, true);
+				this.ui.announce(T('Achievement unlocked: {name}', { name: a.name }), true);
 				this.platform.unlockAchievement(a.key);
 			}
 		}
@@ -785,10 +818,10 @@ export class Game {
 		const line = this.root.querySelector('.hw-results-lb');
 		if (!line) return;
 		line.hidden = false;
-		line.textContent = SH_TEXT.lbPosting;
+		bindText(line, () => SH_TEXT.lbPosting);
 		this.platform.submitScore(total).then((r) => {
-			line.textContent = !r.posted ? SH_TEXT.lbNotPosted
-				: r.rank ? SH_TEXT.lbRank.replace('{rank}', r.rank) : SH_TEXT.lbPosted;
+			bindText(line, () => (!r.posted ? SH_TEXT.lbNotPosted
+				: r.rank ? SH_TEXT.lbRank.replace('{rank}', r.rank) : SH_TEXT.lbPosted));
 		});
 	}
 

@@ -6,6 +6,8 @@
 // key bindings, the invite link and the read-only leaderboard. Hosted mode is
 // "the SDK holds a token"; without one no platform call is made.
 
+import { T } from './i18n.js';
+
 export const PLATFORM_SCHEMA_VERSION = 4;
 
 export class PlatformModule {
@@ -18,6 +20,7 @@ export class PlatformModule {
 		this.syncState = this.hosted ? 'syncing' : 'offline'; // offline | syncing | saving | synced | error
 		this.onChange = null;      // ui callback: nickname/sync/auth state changed
 		this.onAuth = null;        // fn(signedIn) after the SDK signs in/out
+		this.onConflict = null;    // fn(remoteDoc) after a cloud write lost to another device's save
 		this.timeOffsetMs = 0;     // server time minus local time
 		this.online = false;
 		this.telemetryConsent = false;
@@ -25,6 +28,11 @@ export class PlatformModule {
 		this._presenceTimer = null;
 		if (this.sh) {
 			this.sh.on('saved', (ok) => this._setSync(ok ? 'synced' : 'error'));
+			// A conditional write lost to a newer save from another device: reload
+			// the cloud doc and hand it to the game to merge and save again.
+			this.sh.on('saveconflict', () => {
+				this.sh.loadJSON().then((doc) => { if (this.onConflict) this.onConflict(doc || null); });
+			});
 			this.sh.on('auth', (a) => {
 				if (!a.signedIn) { this.nickname = null; this.avatar = null; this.syncState = 'offline'; }
 				if (this.onAuth) this.onAuth(a.signedIn);
@@ -46,7 +54,7 @@ export class PlatformModule {
 	async loadProfile() {
 		if (!this.hosted) return { ok: false, error: 'offline', recoverable: true };
 		const p = await this.sh.profile();
-		this.nickname = p ? p.displayName : 'Player ' + this.userId.slice(0, 6);
+		this.nickname = p ? p.displayName : T('Player {id}', { id: this.userId.slice(0, 6) });
 		this._notify();
 		this.sh.avatarUrl().then((url) => { if (url) { this.avatar = url; this._notify(); } });
 		return { ok: !!p, nickname: this.nickname };
@@ -54,7 +62,7 @@ export class PlatformModule {
 
 	async nicknameFor(userId) {
 		const p = this.hosted ? await this.sh.profile(String(userId)) : null;
-		return p ? p.displayName : 'Player ' + String(userId).slice(0, 6);
+		return p ? p.displayName : T('Player {id}', { id: String(userId).slice(0, 6) });
 	}
 
 	// --- Server time (signed in only) ----------------------------------------------------

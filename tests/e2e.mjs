@@ -378,6 +378,50 @@ async function runPass(browser, base, vp) {
       await page.screenshot({ path: SHOT('signed-in', vp) });
       await page.unroute(/\/api\/v1\//);
     });
+
+    await step('Language: Automatic follows the account (fr-CA); Italian mid-run re-renders; ui.language; report', async () => {
+      const calls = await stubStarHermit(page, { preferredLanguage: 'fr-CA' });
+      await page.goto('about:blank');
+      await page.goto(base + '/?sh=1#game_token=' + launchToken(), { waitUntil: 'load' });
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      await page.waitForFunction(() => window.__hillwheel?.phase === 'title');
+      await page.click('.hw-btn-mode:has-text("Entraînement")');
+      await page.click('.hw-level-list button >> nth=0');
+      await waitActive(page);
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.hw-panel h1:text-is("En pause")', { timeout: 5000 });
+      const runBefore = await page.evaluate(() => window.__hillwheel.session.state.tick);
+      const choice = page.locator('[data-game-language="choice"]');
+      await choice.scrollIntoViewIfNeeded();
+      const auto = await choice.locator('option').first().textContent();
+      if (!/^Automatique — Français \(Canada\)$/.test(auto)) throw new Error('Automatic label not resolved: ' + auto);
+      await choice.selectOption('it-IT');
+      await page.waitForFunction(() => document.documentElement.lang === 'it-IT');
+      await page.waitForFunction(() => /Salvato/.test(document.querySelector('[data-game-language="status"]').textContent));
+      if (calls.settings['ui.language']?.choice !== 'it-IT') throw new Error('ui.language not saved: ' + JSON.stringify(calls.settings));
+      await page.waitForSelector('.hw-panel h1:text-is("In pausa")', { timeout: 5000 });
+      if (!/Qualità/.test(await page.locator('#hw-gfx').textContent())) throw new Error('graphics box not re-rendered');
+      if (!/CARBURANTE/.test(await page.locator('.hw-hud').textContent())) throw new Error('HUD not re-rendered');
+      if (await page.evaluate(() => window.__hillwheel.session.state.tick) !== runBefore) throw new Error('run advanced while paused');
+      await page.locator('[data-game-report="title"]').scrollIntoViewIfNeeded();
+      await page.fill('[data-game-report="title"]', 'Test report');
+      await page.click('[data-game-report="send"]');
+      await page.waitForFunction(() => /Grazie/.test(document.querySelector('[data-game-report="status"]').textContent));
+      if (!calls.reports?.[0] || calls.reports[0].kind !== 'bug') throw new Error('report not posted');
+      await page.screenshot({ path: SHOT('language', vp) });
+      if (vp === 'mobile') {
+        await choice.selectOption('de-DE');
+        await page.waitForFunction(() => document.documentElement.lang === 'de-DE');
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        if (overflow > 0) throw new Error('German pause screen overflows by ' + overflow + 'px');
+        await page.screenshot({ path: SHOT('language-de', vp) });
+      }
+      await choice.selectOption('auto');
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      await page.click('button:has-text("Reprendre")');
+      await waitActive(page);
+      await page.unroute(/\/api\/v1\//);
+    });
   } finally {
     if (errors.length) {
       console.log(`PAGE ERRORS (${vp}):\n` + errors.join('\n'));

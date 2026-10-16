@@ -19,7 +19,7 @@ function backend() {
     const r = (st, b) => new Response(b, { status: st });
     if (url.includes('/cloud-saves/')) {
       const key = decodeURIComponent(url.split('/cloud-saves/')[1]);
-      if (method === 'PUT') { saves[key] = Buffer.from(body.dataBase64, 'base64'); return r(200, '{}'); }
+      if (method === 'PUT') { saves[key] = Buffer.from(body.dataBase64, 'base64'); return r(200, JSON.stringify({ etag: '"v' + calls.length + '"' })); }
       return saves[key] ? r(200, saves[key]) : r(404, '');
     }
     if (url.endsWith('/profile')) return r(200, JSON.stringify({ username: 'pk', nickname: 'Al' }));
@@ -91,6 +91,31 @@ test('standalone: no token, no platform calls', async () => {
 });
 
 test('hosted domain without token offers sign-in', () => {
-  const { p } = make('', async () => { throw new Error('x'); }, 'gid-1.starhermit.com');
+  const { p } = make('', async () => { throw new Error('x'); }, '0b9d6f2e-3c4a-4e5b-9a7c-1d2e3f405162.starhermit.com');
   assert.equal(p.canSignIn(), true);
+});
+
+test('save conflict: the other device\'s save is reloaded and handed to the game to merge', async () => {
+  const be = backend();
+  let refuse = false;
+  const fetch = async (url, init = {}) => {
+    if (refuse && (init.method || 'GET') === 'PUT' && url.includes('/cloud-saves/')) {
+      refuse = false;
+      return new Response(JSON.stringify({ error: 'conflict' }), { status: 412 });
+    }
+    return be.fetch(url, init);
+  };
+  const { p, sdk } = make('#game_token=' + token(), fetch);
+  const got = [];
+  p.onConflict = (doc) => got.push(doc);
+  p.queueSave({ schemaVersion: 1, progress: { lastStage: 7 } });   // "another device" wrote this
+  await sdk.flushSave();
+  await p.loadSave();
+  refuse = true;
+  p.queueSave({ schemaVersion: 1, progress: { lastStage: 2 } });
+  await sdk.flushSave();
+  await new Promise((r) => setTimeout(r, 30));
+  assert.deepEqual(got, [{ schemaVersion: 1, progress: { lastStage: 7 } }]);
+  assert.equal(sdk.saveConflicted(), false);
+  sdk.signOut();
 });

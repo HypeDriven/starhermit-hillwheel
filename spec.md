@@ -24,8 +24,9 @@ green flag before the tank runs dry.
 
 | Path | Responsibility |
 |---|---|
-| `index.html` | Entry point; importmap for `three` and `three/addons/`, mounts `#app`, loads `starhermit-sdk.js` then `bootstrap.js` as a module |
-| `starhermit-sdk.js` | Shared StarHermit client (`window.StarHermit`), an unmodified copy of `tools/starhermit-sdk.js` |
+| `index.html` | Entry point; importmap for `three` and `three/addons/`, mounts `#app`, loads `starhermit-sdk.js` and `sh-language.js`, then `bootstrap.js` as a module |
+| `starhermit-sdk.js`, `sh-language.js` | Shared StarHermit client (`window.StarHermit`) and language preference (`window.StarHermitLanguage`), unmodified copies of `tools/` |
+| `i18n.js`, `strings.js` | Localization runtime (`T`, deferred `L` messages, in-place re-rendering, `hw-language` event, the Language setting) and the translation tables (§10) |
 | `bootstrap.js` | Capability detection (WebGL/touch/gamepad/DPR/reduced-motion), `StarHermit.init()`, asset manifest, `createGame` |
 | `game.js` | Orchestrator: phase machine, fixed-timestep loop, input mapping, coaching, achievements, progression, results |
 | `rules.js` | Pure rules: terrain, physics step, legality, scoring, hashing, commands, terminal states. No DOM, no timers |
@@ -33,7 +34,7 @@ green flag before the tank runs dry.
 | `session.js` | One rules state plus an ordered idempotent command log, undo snapshots, replay export and verification |
 | `render.js` | Three.js scene graph: terrain ribbon, backdrop ridges, sky, clouds/stars, vehicle, flags, cans, trees, rocks, particles, camera, lighting, post-processing chain, adaptive resolution, graphics settings |
 | `gfx.js` | Pure graphics quality model: presets, per-category overrides, GPU detection, `resolve()`, `describe()` |
-| `gfx-i18n.js` | Graphics-panel strings in the nine supported locales, locale picking from `navigator.languages` |
+| `gfx-i18n.js` | Graphics-panel strings in the nine supported locales, shown in the game language |
 | `vendor/three/addons/` | three.js r185 (0.185.1) addons: EffectComposer + Render/Shader/Output/GTAO/UnrealBloom/SMAA passes, FXAA, RoomEnvironment, RoundedBoxGeometry, and the shaders they import |
 | `ui.js` | DOM shell: screens, HUD, pedals, settings/progress persistence, live region, strings |
 | `audio.js` | Web Audio buses, clip playback with synth fallback, engine hum, music, wind ambience |
@@ -45,7 +46,8 @@ green flag before the tank runs dry.
 | `tests/e2e.mjs` | Playwright-core playthrough of the real UI, desktop + mobile — `npm run test:e2e` |
 | `tests/review-fixes.mjs` | Regression checks for settings persistence and countdown/restart |
 | `tests/gfx.test.mjs` | `node --test` unit tests for `gfx.js` and the graphics string catalogue (run by `npm test`) |
-| `tests/platform.test.mjs` | `node --test` unit tests for `platform.js` over the SDK with a stubbed fetch (run by `npm test`) |
+| `tests/platform.test.mjs` | `node --test` unit tests for `platform.js` over the SDK with a stubbed fetch, incl. the save-conflict reload (run by `npm test`) |
+| `tests/i18n.test.mjs` | `node --test`: every used string key in all nine locales; language follows `sh-language.js` and switches live (run by `npm test`) |
 | `smoke.js` | Legacy browser smoke test against `server.js` (superseded by `tests/e2e.mjs`) |
 | `sfx/` | 17 Opus clips + `manifest.txt` (canonical), `manifest.json` (regeneration), `manifest.md` |
 | `assets/keyart.webp` | Title-screen key art |
@@ -363,8 +365,9 @@ cheapest tier (DPR 1, no shadows, trees, particles, AA or post). If the post cha
 built the game renders directly and the panel says so. The canvas carries
 `data-gfx-preset`/`data-gfx-auto`; controls have ids `hw-gfx-preset`, `hw-gfx-scale`,
 `hw-gfx-<category>`, `hw-gfx-adaptive`, `hw-gfx-fps`, `hw-gfx-summary`. Graphics-panel strings are
-localized (en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT) from
-`navigator.languages`.
+localized (en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT) in the game language. The
+rows live in their own box inside the section, which redraws (preset or language change) without
+touching the shared Sound / frame-rate / Language / Report sections mounted beside it.
 
 **Visual assets the design calls for:** title key art (§15) and the platform cover; everything in
 the play scene is procedural by design, so no in-game textures or sprites are shipped.
@@ -418,20 +421,30 @@ Engine hum is synthesized, not sampled: a sawtooth through a low-pass whose freq
 
 ## 10. Localization
 
-**Ships today: en-US only.** All player-facing text is authored in English and lives in three
-places: `STRINGS`, `MODE_DESCRIPTIONS`, `END_REASONS`, `PEDAL_LABELS` and the help/settings
-builders in `ui.js`; the coaching lines and announcements in `game.js`; content names in
-`content.js`. There is no locale selection, no message catalogue and no `lang` switching beyond
-the static `lang="en"` on `<html>`.
+Nine locales ship: **en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT**. Every
+player-facing string — title, mode cards, setup lists, HUD (objective, fuel, score, speed line,
+pedal labels and aria-labels), coaching lines, countdown, pause, settings, help, results, end
+reasons, leaderboards, toasts and live-region announcements, plus the content names (lessons and
+their intros, challenges, "Stage n"/"Mastery n", "Daily <date>", achievements) — is an English
+key in `strings.js` with es-419, de-DE, fr-FR, pt-BR and it-IT translations; en-GB, es-ES and fr-CA
+carry only their differences (fr-CA "Pointage"). The Graphics panel (`gfx-i18n.js`) and the account
+strings (`SH_TEXT` in `ui.js`) keep their own nine-locale tables and follow the same language.
+"Hillwheel" and "StarHermit" are not translated; distances and scores are plain integers.
 
-**Design intent.** The required set is en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR,
-it-IT, chosen from `navigator.languages` with an in-game override persisted in settings, falling
-back within a language before falling back to en-US. Strings become keyed entries in a single
-catalogue module with the English copy as the key set; formatting stays presentation-only
-(distances and scores are integers, dates are ISO UTC, so no plural or number formatting is
-needed beyond `Intl.NumberFormat`). Layout already tolerates expansion: every button and panel
-wraps, none use fixed widths, and the pedals carry both a label and a glyph — budget +40 % over
-English for German. This is not implemented (§17).
+- **Language setting:** the pause screen and Settings (title) contain the shared `game-options.js`
+  **Language → Game language** selector: **Automatic — <resolved language>** plus the nine locales
+  by native name, with a sync status line.
+- **Resolution** (`sh-language.js`): explicit game choice → for Automatic, the StarHermit account's
+  `preferredLanguage` (`GET /api/v1/me/language`, signed in only) → `navigator.languages` → en-US,
+  mapped to the nearest shipped locale (`es-MX → es-419`, `en-AU → en-GB`). The choice is stored per
+  player in `localStorage['hillwheel.language.<user|guest>']` and, signed in, in the per-player
+  settings key `ui.language` as `{ choice }`; the game never writes the platform preference.
+  `?lang=` forces a locale for the page load (QA links) and hides the selector.
+- **Live switching:** UI text is built from deferred messages, so a change re-renders the open
+  screen, HUD, pedals, coaching banner and toasts in place and sets `<html lang>`; the run, its
+  physics and timers are untouched. Changing a setting on the pause screen no longer rebuilds it.
+- **Layout:** buttons and panels wrap; the HUD objective uses short forms ("Flagge in 295 m") so
+  German and the romance locales fit at 390 px wide.
 
 ---
 
@@ -478,14 +491,23 @@ actions `control.throttle=ArrowUp+KeyW`, `brake=ArrowDown+KeyS`, `tiltL=ArrowLef
   profile line disappears and play continues locally.
 - **Sign-in** — on `<id>.starhermit.com` without a token the title shows **Sign in with
   StarHermit**; hidden when signed in and when running locally.
-- **Profile** — the profile nickname (never `/api/v1/me`, never usernames; `"Player " + id`
+- **Profile** — the profile nickname (never `/api/v1/me`, never usernames; localized "Player <id>"
   fallback) and avatar are shown with the cloud sync status on the title screen.
 - **Server time** — signed in only, `GET /api/v1/time` sets the RTT-adjusted clock offset and the
   UTC date the Daily is derived from. Standalone uses the local clock and makes no request.
 - **Cloud save** — the slot `game:<slug>` via the SDK; the remote doc wins at load (a save made
   while that load runs is held, then dropped if a remote doc was adopted or pushed if not), pushes
   debounce ~2 s and flush with keepalive on `pagehide`/`visibilitychange`, and `localStorage`
-  remains the offline cache.
+  remains the offline cache. Writes are conditional on the version last read: when another device
+  saved first (`saveconflict`), the game reloads the cloud doc and merges its progress — higher
+  score per completed stage, union of lessons and achievements, furthest stage, larger distance and
+  run counts, best Daily per date — keeping this device's settings and the run in progress, then
+  saves the merged doc.
+- **Reports** — Settings / pause → **Report a problem** (signed in, from `game-options.js`) files a
+  bug report through `StarHermit.reportBug` with a small non-personal `context.json`; uncaught
+  errors are filed as crash reports through `StarHermit.captureCrashes` (capped by the SDK).
+- **Language** — the per-player `ui.language` setting and the account's preferred language drive
+  the game language (§10).
 - **Settings KV** — every settings change (volumes, mute, graphics, reduced motion, hold/toggle,
   left-handed pedals, telemetry consent …) is mirrored with `patchSettings` (600 ms debounce);
   at start the platform values are applied over the local ones.
@@ -506,7 +528,7 @@ actions `control.throttle=ArrowUp+KeyW`, `brake=ArrowDown+KeyS`, `tiltL=ArrowLef
   sends nothing in any mode; events are only filtered through that allow-list.
 
 Account strings (sign-in, invite, toasts, leaderboard line) are localized in the nine locales (`SH_TEXT` in
-`ui.js`, locale from `pickLocale`).
+`ui.js`, in the game language).
 
 **Deliberately local in the client**: achievement unlocks (part of the progress doc, mirrored by
 the cloud save), Daily bests (kept per date in the progress doc),
@@ -643,8 +665,6 @@ than a wiring change.
 
 ## 16. Known limitations
 
-- **Localization is not implemented** — the game ships English only (§10), except the Graphics
-  settings section, which is localized in all nine locales.
 - **Ranked daily submission needs a platform game script**, which this game does not ship: on the
   production host the daily leaderboard is read-only client-side and the client submits no
   scores (the replay-validated endpoint in `server.js` is exercised only by `test.js`).
@@ -662,11 +682,10 @@ than a wiring change.
 
 ## 17. Design intent not yet implemented
 
-1. **Nine-locale text** with a catalogue module and a language setting (§10).
-2. **A recorded engine loop** replacing the synthesized hum, cross-faded by RPM band.
-3. **Ghost replays** — the replay envelope already carries everything needed to render a previous
+1. **A recorded engine loop** replacing the synthesized hum, cross-faded by RPM band.
+2. **Ghost replays** — the replay envelope already carries everything needed to render a previous
    run's vehicle alongside the live one on the Daily; nothing draws it yet.
-4. **Per-wheel suspension** so the chassis reads terrain detail the current slope-alignment misses.
+3. **Per-wheel suspension** so the chassis reads terrain detail the current slope-alignment misses.
 
 ## Browser interference
 
