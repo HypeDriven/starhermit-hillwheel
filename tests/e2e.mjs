@@ -214,6 +214,7 @@ async function runPass(browser, base, vp) {
       await page.selectOption('#hw-gfx-preset', 'high');
       await page.waitForFunction(() => document.querySelector('#hw-canvas').dataset.gfxPreset === 'high');
       await page.waitForFunction(() => /2048² shadows/.test(document.querySelector('#hw-gfx-summary')?.textContent || ''));
+      if (!/ · Level 0 · /.test(await page.textContent('#hw-gfx-summary'))) throw new Error('summary lacks the hardware level: ' + await page.textContent('#hw-gfx-summary'));
       // One per-category override through the visible select.
       await page.locator('#hw-gfx-bloom').scrollIntoViewIfNeeded();
       const fromPreset = await page.textContent('#hw-gfx-bloom option[value="preset"]');

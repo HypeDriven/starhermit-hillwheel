@@ -10,7 +10,7 @@ const EN_US = {
 	adaptive: 'Adaptive resolution',
 	showFps: 'Show frame rate',
 	postUnavailable: 'Post-processing is unavailable on this device, so effects are drawn without it.',
-	unknownGpu: 'unknown GPU',
+	unknownGpu: 'unknown GPU', level: 'Level {n}',
 	cat: {
 		shadows: 'Shadows', ao: 'Ambient occlusion', bloom: 'Bloom', grade: 'Color grade',
 		antialias: 'Anti-aliasing', reflections: 'Reflections', particles: 'Dust and sparkles',
@@ -41,7 +41,7 @@ const ES = {
 	adaptive: 'Resolución adaptativa',
 	showFps: 'Mostrar fotogramas por segundo',
 	postUnavailable: 'El posprocesado no está disponible en este dispositivo; los efectos se dibujan sin él.',
-	unknownGpu: 'GPU desconocida',
+	unknownGpu: 'GPU desconocida', level: 'Nivel {n}',
 	cat: {
 		shadows: 'Sombras', ao: 'Oclusión ambiental', bloom: 'Resplandor', grade: 'Corrección de color',
 		antialias: 'Antialiasing', reflections: 'Reflejos', particles: 'Polvo y destellos',
@@ -73,7 +73,7 @@ const DE = {
 	adaptive: 'Adaptive Auflösung',
 	showFps: 'Bildrate anzeigen',
 	postUnavailable: 'Nachbearbeitung ist auf diesem Gerät nicht verfügbar; Effekte werden ohne sie gezeichnet.',
-	unknownGpu: 'unbekannte GPU',
+	unknownGpu: 'unbekannte GPU', level: 'Stufe {n}',
 	cat: {
 		shadows: 'Schatten', ao: 'Umgebungsverdeckung', bloom: 'Leuchten', grade: 'Farbkorrektur',
 		antialias: 'Kantenglättung', reflections: 'Spiegelungen', particles: 'Staub und Funken',
@@ -99,7 +99,7 @@ const FR = {
 	adaptive: 'Résolution adaptative',
 	showFps: 'Afficher les images par seconde',
 	postUnavailable: 'Le post-traitement n’est pas disponible sur cet appareil ; les effets sont affichés sans lui.',
-	unknownGpu: 'GPU inconnu',
+	unknownGpu: 'GPU inconnu', level: 'Niveau {n}',
 	cat: {
 		shadows: 'Ombres', ao: 'Occlusion ambiante', bloom: 'Halo lumineux', grade: 'Étalonnage des couleurs',
 		antialias: 'Anticrénelage', reflections: 'Reflets', particles: 'Poussière et étincelles',
@@ -132,7 +132,7 @@ const PT_BR = {
 	adaptive: 'Resolução adaptativa',
 	showFps: 'Mostrar quadros por segundo',
 	postUnavailable: 'O pós-processamento não está disponível neste dispositivo; os efeitos são desenhados sem ele.',
-	unknownGpu: 'GPU desconhecida',
+	unknownGpu: 'GPU desconhecida', level: 'Nível {n}',
 	cat: {
 		shadows: 'Sombras', ao: 'Oclusão de ambiente', bloom: 'Brilho', grade: 'Correção de cor',
 		antialias: 'Antisserrilhamento', reflections: 'Reflexos', particles: 'Poeira e faíscas',
@@ -158,7 +158,7 @@ const IT = {
 	adaptive: 'Risoluzione adattiva',
 	showFps: 'Mostra fotogrammi al secondo',
 	postUnavailable: 'La post-elaborazione non è disponibile su questo dispositivo; gli effetti vengono disegnati senza.',
-	unknownGpu: 'GPU sconosciuta',
+	unknownGpu: 'GPU sconosciuta', level: 'Livello {n}',
 	cat: {
 		shadows: 'Ombre', ao: 'Occlusione ambientale', bloom: 'Bagliore', grade: 'Correzione colore',
 		antialias: 'Antialiasing', reflections: 'Riflessi', particles: 'Polvere e scintille',

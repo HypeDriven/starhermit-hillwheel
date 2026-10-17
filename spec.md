@@ -33,7 +33,8 @@ green flag before the tank runs dry.
 | `content.js` | Versioned content: 5 themes, 5 lessons, 40 journey stages, 4 challenges, daily derivation, offline validators |
 | `session.js` | One rules state plus an ordered idempotent command log, undo snapshots, replay export and verification |
 | `render.js` | Three.js scene graph: terrain ribbon, backdrop ridges, sky, clouds/stars, vehicle, flags, cans, trees, rocks, particles, camera, lighting, post-processing chain, adaptive resolution, graphics settings |
-| `gfx.js` | Pure graphics quality model: presets, per-category overrides, GPU detection, `resolve()`, `describe()` |
+| `gfx.js` | Pure graphics quality model: presets, per-category overrides, hardware-level detection (`detectLevel`, `presetForLevel`, `detectPreset`), per-preset `BUDGETS`/`budgetFor`, `resolve()`, `describe()` |
+| `gpu-level.js` | Shared StarHermit hardware-level module (`window.StarHermitGpu`, classic script loaded before `bootstrap.js`), copied from the platform tools, never edited here |
 | `gfx-i18n.js` | Graphics-panel strings in the nine supported locales, shown in the game language |
 | `vendor/three/addons/` | three.js r185 (0.185.1) addons: EffectComposer + Render/Shader/Output/GTAO/UnrealBloom/SMAA passes, FXAA, RoomEnvironment, RoundedBoxGeometry, and the shaders they import |
 | `ui.js` | DOM shell: screens, HUD, pedals, settings/progress persistence, live region, strings |
@@ -346,28 +347,58 @@ sparkle burst when a can is collected. Clouds, star twinkle and flag waves stop 
 motion (setting or `prefers-reduced-motion`) or a Still sky.
 
 The Settings screen and the Pause screen both carry a **Graphics** section: Quality (Auto
-(detected: …), Low, Balanced, High, Ultra — Auto comes from the WebGL unmasked renderer string:
-software renderers get Low, discrete GPUs and Apple M-series get High, others Balanced, and
-touch-only devices are capped at Balanced), Render scale 50–200 %, one select per effect —
+(detected: …), Low, Balanced, High, Ultra — Auto comes from the StarHermit hardware level below), Render scale 50–200 %, one select per effect —
 Shadows (off/1024²/2048²/4096²), Ambient occlusion (off/on/high), Bloom, Colour grade,
-Anti-aliasing (off/FXAA/SMAA/MSAA), Reflections, Dust and sparkles (off/64/192 particles), Trees
-and rocks (off/60 %/full), Sky (still/animated) and Terrain detail (plain: 2.0-unit step, 8 rows;
-detailed: 0.7-unit step, 17 rows, noise shading, grass tufts) — each defaulting to "From preset
-(…)", plus Adaptive resolution and Show frame rate toggles and a summary line "GPU · cost ·
-W×H px". Choosing a preset clears the overrides. Changes apply immediately (shadow maps, post
-chain, pixel ratio, env maps and material recompiles; terrain/foliage/particle changes rebuild the
-level views from the same seed) and persist as `settings.graphics` in `hillwheel-settings-v1` and
+Anti-aliasing (off/FXAA/SMAA/MSAA), Reflections, Dust and sparkles (off / a third / all of the preset's particle budget), Trees
+and rocks (off / 60 % / all of the preset's tree budget), Sky (still/animated) and Terrain detail (plain: 2.0-unit step, 8 rows;
+detailed: 0.7-unit step, 17 rows, noise shading, the preset's grass tufts) — each defaulting to "From preset
+(…)", plus Adaptive resolution and Show frame rate toggles and a summary line "GPU · Level N · cost ·
+W×H px" ("Level" localized). Choosing a preset clears the overrides. Changes apply immediately (shadow maps, post
+chain, pixel ratio, env maps and material recompiles; terrain/foliage/particle and asset-budget changes
+rebuild the level views from the same seed) and persist as `settings.graphics` in `hillwheel-settings-v1` and
 the cloud save. Pixel ratio is min(DPR, preset cap: Low 1, Balanced 1.5, High/Ultra 2) × preset
 scale (Ultra 1.25) × render scale × adaptive scale. Adaptive resolution averages 90 frames and
 steps down 0.1 (to 0.6) above 26 ms or back up 0.05 below 14 ms. The frame-rate readout
 (`#hw-fps`) sits top-right under the HUD bar and ignores the pointer. Low matches the original
-cheapest tier (DPR 1, no shadows, trees, particles, AA or post). If the post chain cannot be
+cheapest tier (DPR 1, no shadows, trees, particles, AA or post) with Lambert props. If the post chain cannot be
 built the game renders directly and the panel says so. The canvas carries
 `data-gfx-preset`/`data-gfx-auto`; controls have ids `hw-gfx-preset`, `hw-gfx-scale`,
 `hw-gfx-<category>`, `hw-gfx-adaptive`, `hw-gfx-fps`, `hw-gfx-summary`. Graphics-panel strings are
 localized (en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR, it-IT) in the game language. The
 rows live in their own box inside the section, which redraws (preset or language change) without
 touching the shared Sound / frame-rate / Language / Report sections mounted beside it.
+
+**Hardware-level detection.** `gpu-level.js` (shared StarHermit copy, `window.StarHermitGpu`) rates the
+WebGL unmasked renderer plus device facts (`detectSystem()`) on the StarHermit hardware level 0–20 (0 =
+Galaxy S20 / Intel UHD or weaker and every software renderer, 20 = RTX 5090, each level ≈ 1.23×; laptop
+parts two levels below desktop; phones, tablets and ≤ 4 GB machines capped at 9). `gfx.js` maps it with
+`presetForLevel(level, { low: 0, balanced: 4, high: 10, ultra: 17 })`, so Auto picks Ultra on strong
+GPUs; adaptive resolution still steps down when slow. Headless SwiftShader is level 0 → Low. Phones and
+tablets pace Auto FPS at half the display refresh rate ("Auto (half refresh rate)") and start at 16
+simultaneous sounds (shared `game-options.js`).
+
+**Per-preset budgets** (`BUDGETS` / `budgetFor` in `gfx.js`; each preset holds 60 FPS on the weakest
+GPU Auto gives it — Low at level 0, Balanced 4, High 10, Ultra 17). Tree and particle counts are tuned at
+the floor level and scale up within the preset on faster GPUs (`StarHermitGpu.scaleBudget`, ≤ 2×). The
+track profile and everything the vehicle touches are identical on every preset.
+
+| Budget | Low | Balanced | High | Ultra |
+|---|---|---|---|---|
+| Prop materials (vehicle, cans, flags, arch, trees, rocks) | Lambert | Standard | clear-coat Physical paint, helmet and cans | same as High |
+| Trees per 100 m at Trees "full" (rocks follow) | 8 | 11 | 14.3 | 20 |
+| Trees and rocks cast shadows | no | no | yes | yes |
+| Round-geometry segments (trees, wheels, cans, poles) | ×0.5 | ×0.75 | ×1 | ×1.5 |
+| Grass tufts per metre (Terrain detail: detailed) | 0.8 | 1.2 | 2.2 | 3.2 |
+| Particle pool at Dust and sparkles "high" | 96 | 144 | 192 | 320 |
+| Bloom / GTAO resolution | ½ / ½ | ½ / ½ | ½ / ½ | full / full |
+
+**Benchmark** (`node tools/gfx-bench.mjs hillwheel`; hook `tests/gfx-bench.mjs` picks the preset in
+Settings → Graphics, starts Journey stage 1 and drives it with real key presses — the e2e autopilot —
+restarting from the results). Measured 2026-10-17 (AMD Radeon iGPU level 2 GPU time minus the same page
+with draws skipped, projected to the preset's floor level; RTX 5090 CPU time):
+
+- Desktop 1920×1080: PASS low (typical 0.48 / slow 3.25 ms at level 0, CPU p90 0.90 ms); PASS balanced (3.01 / 3.85 ms at level 4, CPU 1.20 ms); PASS high (1.19 / 0.81 ms at level 10, CPU 1.90 ms); PASS ultra (2.43 / 3.02 ms at level 17, CPU 2.40 ms).
+- Mobile 390×844 @3×: PASS low (0.00 / 0.43 ms at level 0, CPU 0.90 ms); PASS balanced (0.00 / 2.46 ms at level 4, CPU 1.10 ms).
 
 **Visual assets the design calls for:** title key art (§15) and the platform cover; everything in
 the play scene is procedural by design, so no in-game textures or sprites are shipped.
@@ -594,8 +625,10 @@ malformed commands; deterministic replay of recorded sessions plus fuzzed input 
 snapshots; content validation of all 5 lessons, 40 stages, 4 challenges and a 7-day daily window;
 and a live `server.js` API smoke covering time, daily, score validation, leaderboard, achievements
 and saves.
-`npm test` then runs `node --test tests/gfx.test.mjs tests/platform.test.mjs`: GPU-string
-detection (including the mobile cap), `resolve()` with Auto/preset/overrides/scale clamping,
+`npm test` then runs `node --test tests/gfx.test.mjs tests/platform.test.mjs`: hardware level →
+preset (SwiftShader/llvmpipe, AMD Radeon Graphics and Intel UHD → Low, Iris Xe → Balanced, GTX 1070 →
+High, RTX 4080/5090 → Ultra; phones such as Adreno 740 capped at Balanced), the per-preset budget table
+(explicit, non-decreasing, floor-level tuned, scaling with the level), `resolve()` with Auto/preset/overrides/scale clamping,
 preset-clears-overrides, cost summary and the nine-locale string catalogue; and `platform.js`
 over the SDK with a stubbed fetch — token read and stripped, nickname, cloud save round-trip
 through `game:<slug>`, settings PATCH, bindings overrides, invite link, Bearer on every call,

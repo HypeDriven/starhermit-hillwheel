@@ -15,7 +15,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mulberry32 } from './rules.js';
 import { getTheme } from './content.js';
-import { detectPreset, resolve, describe, SHADOW_MAP, PARTICLE_POOL, FOLIAGE_DENSITY } from './gfx.js';
+import { detectLevel, presetForLevel, resolve, describe, SHADOW_MAP, FOLIAGE_DENSITY } from './gfx.js';
 
 // Authored framing constants (no magic offsets scattered through the code).
 const CAM = { back: 26, up: 12, lookUp: 3, lookAhead: 8, fov: 42, near: 0.5, far: 900 };
@@ -123,6 +123,24 @@ function pointsMaterial(extra = {}) {
 	});
 }
 
+// Material class per budget (gfx.js BUDGETS.material): clear-coated Physical paint and cans only on
+// High/Ultra, Standard on Balanced, Lambert on Low. Custom-shaded materials (terrain) are kept.
+function budgetMaterial(m, kind, cache) {
+	if (!m || m.userData.hwKeep || !m.isMeshStandardMaterial) return m;
+	if (kind === 'physical') return m;
+	if (kind === 'standard' && !m.isMeshPhysicalMaterial) return m;
+	if (cache.has(m)) return cache.get(m);
+	const common = { color: m.color, map: m.map, vertexColors: m.vertexColors, emissive: m.emissive, emissiveIntensity: m.emissiveIntensity,
+		transparent: m.transparent, opacity: m.opacity, side: m.side, flatShading: m.flatShading };
+	const out = kind === 'lambert'
+		? new THREE.MeshLambertMaterial(common)
+		: new THREE.MeshStandardMaterial({ ...common, roughness: m.roughness, metalness: m.metalness });
+	if (kind !== 'lambert') out.userData = { ...m.userData };
+	cache.set(m, out);
+	m.dispose();
+	return out;
+}
+
 function canvasTexture(w, h, draw) {
 	const c = document.createElement('canvas');
 	c.width = w; c.height = h;
@@ -130,6 +148,15 @@ function canvasTexture(w, h, draw) {
 	const t = new THREE.CanvasTexture(c);
 	t.colorSpace = THREE.SRGBColorSpace;
 	return t;
+}
+
+// Run a post pass at a fraction of the frame: EffectComposer.addPass/setSize hand every pass the full
+// frame size, so the pass's own setSize applies the budget's scale (half-res bloom/GTAO below Ultra).
+function atScale(pass, k) {
+	if (!(k < 1)) return pass;
+	const setSize = pass.setSize.bind(pass);
+	pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+	return pass;
 }
 
 export class RenderModule {
@@ -147,7 +174,14 @@ export class RenderModule {
 		this.renderer.toneMappingExposure = 0.92;
 		this.renderer.shadowMap.type = THREE.PCFShadowMap;
 		this.gpu = RenderModule._gpuName(this.renderer);
-		this.detected = detectPreset(this.gpu, { mobile });
+		// StarHermit hardware level (gpu-level.js): renderer string + device facts (cores, memory, screen).
+		let sys = { mobile, webgl2: this.renderer.capabilities.isWebGL2 !== false };
+		try {
+			const G = globalThis.StarHermitGpu;
+			if (G) { const d = G.detectSystem(); sys = { ...sys, mobile: mobile || d.mobile, touch: d.touch, screen: d.screen, cores: d.cores, memoryGb: d.memoryGb, astc: d.astc }; }
+		} catch { /* defaults */ }
+		this.gpuLevel = detectLevel(this.gpu, sys);
+		this.detected = presetForLevel(this.gpuLevel);
 
 		this.scene = new THREE.Scene();
 		this.camera = new THREE.PerspectiveCamera(CAM.fov, 4 / 3, CAM.near, CAM.far);
@@ -343,7 +377,7 @@ export class RenderModule {
 		if (key === this._gfxKey) return;
 		this._gfxKey = key;
 		const prev = this.q;
-		const g = resolve(saved, this.detected);
+		const g = resolve(saved, this.detected, this.gpuLevel);
 		this.q = g;
 
 		const size = SHADOW_MAP[g.shadows];
@@ -360,7 +394,8 @@ export class RenderModule {
 		this.uDetail.value = g.detail === 'detailed' ? 1 : 0;
 
 		// Geometry-level choices rebuild the level views (same seed, same layout).
-		const rebuild = prev && this.level && (prev.detail !== g.detail || prev.foliage !== g.foliage || prev.particles !== g.particles);
+		const assets = (q) => [q.detail, q.foliage, q.particles, q.budget.material, q.budget.trees, q.budget.treeShadows, q.budget.segments, q.budget.tufts, q.budget.particles].join('|');
+		const rebuild = prev && this.level && assets(prev) !== assets(g);
 		if (rebuild) {
 			const { state, themeId, seed } = this.level;
 			this.loadLevel(state, themeId, seed);
@@ -387,6 +422,7 @@ export class RenderModule {
 		const px = [Math.round(this.size[0] * this.pixelRatio), Math.round(this.size[1] * this.pixelRatio)];
 		return {
 			gpu: this.gpu,
+			level: this.gpuLevel,
 			detected: this.detected,
 			resolved: this.q,
 			summary: describe(this.q, px, words),
@@ -439,7 +475,7 @@ export class RenderModule {
 			composer.setSize(w, h);
 			composer.addPass(new RenderPass(this.scene, this.camera));
 			if (g.ao !== 'off') {
-				const ao = new GTAOPass(this.scene, this.camera, w * pr, h * pr);
+				const ao = atScale(new GTAOPass(this.scene, this.camera, w * pr, h * pr), g.budget.aoRes);
 				ao.output = GTAOPass.OUTPUT.Default;
 				// Keep the sky dome, clouds, backdrop ridges and halo sprites out of the AO
 				// depth/normal pre-pass: they are backdrop, not contact surfaces.
@@ -458,7 +494,7 @@ export class RenderModule {
 			if (g.bloom === 'on') {
 				// High threshold: only the sun, headlights, fuel cans, the goal flag and sparkles bloom.
 				const bright = new THREE.Color(this.theme.ground).getHSL({}).l > 0.7; // snow would bloom
-				composer.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.45, bright ? 2.2 : 0.92));
+				composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.45, bright ? 2.2 : 0.92), g.budget.bloomRes));
 			}
 			composer.addPass(new OutputPass());
 			if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
@@ -499,7 +535,9 @@ export class RenderModule {
 		this.unloadLevel();
 		const theme = getTheme(themeId);
 		this._applyTheme(theme);
-		const q = this.q;
+		const q = this.q, b = q.budget;
+		const seg = (n, min = 5) => Math.max(min, Math.round(n * b.segments));
+		this._seg = seg;
 		const detailed = q.detail === 'detailed';
 		const group = new THREE.Group();
 		const terrain = state.terrain;
@@ -621,8 +659,8 @@ export class RenderModule {
 
 		// Fuel cans: glossy jerry cans with a soft halo so they read from far away.
 		const canBody = new RoundedBoxGeometry(0.62, 0.82, 0.34, 2, 0.07);
-		const canHandle = new THREE.TorusGeometry(0.13, 0.035, 6, 12, Math.PI);
-		const canSpout = new THREE.CylinderGeometry(0.05, 0.06, 0.16, 8);
+		const canHandle = new THREE.TorusGeometry(0.13, 0.035, seg(6, 4), seg(12), Math.PI);
+		const canSpout = new THREE.CylinderGeometry(0.05, 0.06, 0.16, seg(8));
 		const canMat = new THREE.MeshPhysicalMaterial({ color: theme.accent, roughness: 0.35, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.2, emissive: theme.accent, emissiveIntensity: 0.22 });
 		canMat.userData.hwEnv = 0.5;
 		const capMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.5, metalness: 0.6 });
@@ -643,10 +681,10 @@ export class RenderModule {
 		});
 
 		// Checkpoint flags (yellow → green when passed) and the goal: cloth that waves in the wind.
-		const flagPole = new THREE.CylinderGeometry(0.07, 0.07, 4, 8);
+		const flagPole = new THREE.CylinderGeometry(0.07, 0.07, 4, seg(8));
 		const poleMat = new THREE.MeshStandardMaterial({ color: 0xd4d8dc, roughness: 0.35, metalness: 0.6 });
 		poleMat.userData.hwEnv = 0.8;
-		const knob = new THREE.SphereGeometry(0.13, 12, 8);
+		const knob = new THREE.SphereGeometry(0.13, seg(12), seg(8, 4));
 		const knobMat = new THREE.MeshStandardMaterial({ color: 0xf2c14e, roughness: 0.3, metalness: 0.8 });
 		const mkCloth = () => new THREE.PlaneGeometry(1.4, 0.8, 10, 3).translate(0.7, 0, 0);
 		this.cloths = [];
@@ -680,7 +718,7 @@ export class RenderModule {
 			}
 		});
 		const gy = terrain.height(state.goalX);
-		const post = new THREE.CylinderGeometry(0.1, 0.1, 6, 8);
+		const post = new THREE.CylinderGeometry(0.1, 0.1, 6, seg(8));
 		for (const z of [-2.6, 2.6]) {
 			const p = new THREE.Mesh(post, archMat);
 			p.position.set(state.goalX, gy + 3, z);
@@ -698,10 +736,10 @@ export class RenderModule {
 		const deco = mulberry32((seed ^ 0xdec0) >>> 0);
 		const density = FOLIAGE_DENSITY[q.foliage];
 		if (density > 0) {
-			const treeCount = Math.floor((length / 7) * density);
-			const trunkGeo = new THREE.CylinderGeometry(0.14, 0.24, 1.4, 6);
-			const crownLo = new THREE.ConeGeometry(1.15, 2.0, 8);
-			const crownHi = new THREE.ConeGeometry(0.8, 1.7, 8);
+			const treeCount = Math.floor((length / 100) * b.trees * density);
+			const trunkGeo = new THREE.CylinderGeometry(0.14, 0.24, 1.4, seg(6, 4));
+			const crownLo = new THREE.ConeGeometry(1.15, 2.0, seg(8));
+			const crownHi = new THREE.ConeGeometry(0.8, 1.7, seg(8));
 			const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2e, roughness: 0.9 });
 			const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, flatShading: true });
 			const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
@@ -722,7 +760,7 @@ export class RenderModule {
 				c.copy(base).multiplyScalar(0.8 + deco() * 0.45);
 				lows.setColorAt(i, c); highs.setColorAt(i, c.multiplyScalar(1.12));
 			}
-			const rockCount = Math.floor((length / 12) * density);
+			const rockCount = Math.floor((length / 100) * (b.trees * 7 / 12) * density);
 			const rockGeo = new THREE.DodecahedronGeometry(0.6, 0);
 			const rockMat = new THREE.MeshStandardMaterial({ color: theme.rock, roughness: 0.85, flatShading: true });
 			const rocks = new THREE.InstancedMesh(rockGeo, rockMat, rockCount);
@@ -734,13 +772,13 @@ export class RenderModule {
 				m4.compose(pv.set(x, surfaceY(x, z) + 0.15 * s, z), rot, sc.set(s * 1.3, s * 0.7, s));
 				rocks.setMatrixAt(i, m4);
 			}
-			for (const m of [trunks, lows, highs, rocks]) { m.layers.set(0); group.add(m); casters.push(m); }
+			for (const m of [trunks, lows, highs, rocks]) { m.layers.set(0); group.add(m); if (b.treeShadows) casters.push(m); else receivers.push(m); }
 		}
 
 		// Grass tufts along the track edges (detailed terrain only).
 		if (detailed && theme.id !== 'frost') {
 			const tuftGeo = new THREE.ConeGeometry(0.09, 0.5, 3).translate(0, 0.25, 0);
-			const tuftCount = Math.floor(length * 2.2);
+			const tuftCount = Math.floor(length * b.tufts);
 			const tufts = new THREE.InstancedMesh(tuftGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), tuftCount);
 			const m4 = new THREE.Matrix4(), rot = new THREE.Quaternion(), sc = new THREE.Vector3(), pv = new THREE.Vector3(), e = new THREE.Euler();
 			const tc = new THREE.Color(theme.groundFar), c = new THREE.Color();
@@ -760,7 +798,7 @@ export class RenderModule {
 		}
 
 		// Particle pool: dust, landing puffs and can sparkles (bounded, layer 2 = never raycast).
-		const pCount = PARTICLE_POOL[q.particles];
+		const pCount = b.particles;
 		this.particles = null;
 		if (pCount > 0) {
 			const pGeo = new THREE.BufferGeometry();
@@ -779,6 +817,14 @@ export class RenderModule {
 		this.dustColor = cTrack.clone().lerp(new THREE.Color(0xe8dcc0), 0.5);
 		this.accentColor = new THREE.Color(theme.accent).multiplyScalar(2.2);
 
+		// Budget material class (Lambert on Low, no clear coat below High); cached per source material.
+		if (b.material !== 'physical') {
+			const cache = new Map();
+			group.traverse((o) => {
+				if (!o.isMesh) return;
+				o.material = Array.isArray(o.material) ? o.material.map((m) => budgetMaterial(m, b.material, cache)) : budgetMaterial(o.material, b.material, cache);
+			});
+		}
 		this.level = { group, ground: groundMesh, casters, receivers, state, themeId, seed };
 		this._applyShadowFlags();
 		this._applyEnvToMaterials(group);
@@ -790,6 +836,7 @@ export class RenderModule {
 
 	_terrainMaterial() {
 		const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, envMapIntensity: 0.5 });
+		mat.userData.hwKeep = true; // custom shader chunks: keep the class on every preset
 		const uDetail = this.uDetail;
 		mat.onBeforeCompile = (shader) => {
 			shader.uniforms.uDetail = uDetail;
@@ -847,7 +894,8 @@ export class RenderModule {
 		const stripeB = stripeF.clone(); stripeB.position.z = -0.56;
 		const seat = new THREE.Mesh(new RoundedBoxGeometry(0.55, 0.36, 0.72, 2, 0.08), dark);
 		seat.position.set(-0.45, 0.66, 0);
-		const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), helmetMat);
+		const seg = this._seg || ((n) => n);
+		const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.24, seg(16), seg(12, 4)), helmetMat);
 		helmet.position.set(-0.2, 1.0, 0);
 		const vis = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.13, 0.3, 1, 0.04), visor);
 		vis.position.set(0.02, 1.01, 0);
@@ -871,8 +919,8 @@ export class RenderModule {
 		group.add(chassis, hood, stripeF, stripeB, seat, body, helmet, vis, hoopA, hoopB, bar, headF, headB, tail, exhaust);
 
 		// Wheels: chunky tyre, silver rim, three spokes so the roll is visible.
-		const tyreGeo = new THREE.TorusGeometry(0.34, 0.13, 10, 22);
-		const rimGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.26, 16).rotateX(Math.PI / 2);
+		const tyreGeo = new THREE.TorusGeometry(0.34, 0.13, seg(10, 6), seg(22, 12));
+		const rimGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.26, seg(16, 8)).rotateX(Math.PI / 2);
 		const spokeGeo = new THREE.BoxGeometry(0.44, 0.07, 0.04);
 		const axleGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6).rotateX(Math.PI / 2);
 		const tyreMat = new THREE.MeshStandardMaterial({ color: 0x1c1f22, roughness: 0.9 });

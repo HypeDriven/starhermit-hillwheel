@@ -466,7 +466,7 @@ export function createUi(root, onAction, settings) {
 		const drawSummary = () => {
 			const info = gfx.info(t.words);
 			if (!info) { summaryEl.textContent = ''; noteEl.hidden = true; return; }
-			summaryEl.textContent = `${info.gpu || t.unknownGpu} · ${info.summary}`;
+			summaryEl.textContent = [info.gpu || t.unknownGpu, info.level != null ? t.level.replace('{n}', info.level) : null, info.summary].filter(Boolean).join(' · ');
 			noteEl.hidden = !info.postFailed;
 			sec.dataset.gfxPreset = info.resolved.preset;
 		};
@@ -508,7 +508,7 @@ export function createUi(root, onAction, settings) {
 			const saved = gfx.get();
 			const info = gfx.info(t.words);
 			const detected = info?.detected || 'balanced';
-			const r = resolve(saved, detected);
+			const r = resolve(saved, detected, info?.level);
 			const h = el('h2', 'hw-gfx-title', t.graphics);
 			h.id = 'hw-gfx-title';
 			box.appendChild(h);
