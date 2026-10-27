@@ -1,25 +1,18 @@
-<!DOCTYPE html>
+<!doctype html>
+<!-- StarHermit web loader, written by starhermit package --web: it pins the engine by hash and holds no script of its own; package again rather than edit it. -->
 <html lang="en">
 <head>
-  <link rel="icon" href="favicon.png" type="image/png">
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#1c2a22" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="icon.png">
 <title>Hillwheel</title>
-<link rel="stylesheet" href="./style.css" />
-<script src="game-options.js" data-game="hillwheel"></script>
-<script src="./ui-scale.js"></script>
-<script type="importmap">
-{ "imports": { "three": "./three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
-</script>
-<script src="browser-guard.js"></script>
+<style>html,body{margin:0;height:100%;background:#000;color:#eee;font:16px/1.5 system-ui,sans-serif}canvas{display:block;width:100%;height:100%}.starhermit-message{position:fixed;inset:0;margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;background:#000}.starhermit-message[hidden]{display:none}.starhermit-late{animation:starhermit-late 0s 20s both}@keyframes starhermit-late{from{visibility:hidden}to{visibility:visible}}</style>
+<script type="module" src="https://wiki.starhermit.com/engine/1.17.1/starhermit.js" integrity="sha384-+f4q1cKW6qgHiXp5YCcwi2+6CDfNCD61wc82KwQAKPLglBEQBSMChRwHRzdDs6vq" crossorigin="anonymous"></script>
+<script type="application/json" id="starhermit-config">{"manifest":{"integrity":"sha384-RJebhetSkOcH0oBoCEnQAWPcHhB/nJ8yDiqAZZDeCr+uiHCFPBmvW0NDIvk6EV47","url":"https://wiki.starhermit.com/engine/1.17.1/manifest.json"}}</script>
 </head>
 <body>
-<div id="app"></div>
-<noscript><p>Hillwheel requires JavaScript and WebGL to run.</p></noscript>
-<script src="./starhermit-sdk.js"></script>
-<script src="./sh-language.js"></script>
-<script src="./gpu-level.js"></script>
-<script type="module" src="./bootstrap.js"></script>
+<canvas></canvas>
+<div id="starhermit-status" class="starhermit-message" role="status"><span>Loading Hillwheel…</span><span class="starhermit-late">If the game has not started, this browser cannot run it or its engine (StarHermit 1.17.1) could not be loaded: reload the page, or open it in a current Chrome, Edge, Firefox or Safari.</span></div>
+<noscript><p class="starhermit-message">This game needs JavaScript.</p></noscript>
 </body>
 </html>
