@@ -1,0 +1,17 @@
+# The Daily (today's shared course by the device's UTC date offline) starts and quits from the pause panel.
+until 300 Hillwheel
+frames 150
+click Daily —
+until 60 ranked
+frames 10
+click ranked
+until 120 m to the flag
+hold KeyW
+frames 400
+release KeyW
+save daily-driving
+key Escape 2
+until 60 Quit to title
+frames 10
+click =Quit to title
+until 120 Quick play

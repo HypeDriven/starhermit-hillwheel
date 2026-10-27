@@ -1,0 +1,58 @@
+# The title and every page from it: Settings (a game option toggled and back), How to play,
+# Leaderboards (a guest's own Daily bests: none yet), and each mode's level list, left by its
+# Back button or by Escape.
+until 300 Hillwheel
+frames 150
+expect Quick play — learn the basics
+save title
+click =Settings
+until 60 Left-handed pedals
+frames 10
+click Left-handed pedals
+frames 10
+save settings
+click =← Back
+until 60 Quick play
+frames 10
+click =How to play
+until 60 Balance
+frames 10
+save help
+key Escape 2
+until 60 Quick play
+frames 10
+click =Leaderboards
+until 60 No scores yet
+frames 10
+save leaderboard
+click =← Back
+until 60 Quick play
+frames 10
+click Learn. Five short lessons
+until 60 Give it throttle
+frames 10
+save learn
+click =← Back
+until 60 Quick play
+frames 10
+click Daily —
+until 60 ranked
+frames 10
+save daily
+click =← Back
+until 60 Quick play
+frames 10
+click Practice. Pick a hill type
+until 60 Wild hills
+frames 10
+save practice
+key Escape 2
+until 60 Quick play
+frames 10
+click Challenge. Special rules
+until 60 Marathon
+frames 10
+save challenge
+click =← Back
+until 60 Quick play
+frames 10

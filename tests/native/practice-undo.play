@@ -1,0 +1,23 @@
+# Practice › Easy hills: drive, pause, Undo (back to the last two-second snapshot, which resumes the
+# run), then drive on to the flag.
+until 300 Hillwheel
+frames 150
+click Practice. Pick a hill type
+until 60 Easy hills
+frames 10
+click =Easy hills
+until 120 m to the flag
+hold KeyW
+frames 420
+release KeyW
+key Escape 2
+until 60 =Undo
+frames 10
+save practice-paused
+click =Undo
+frames 30
+hold KeyW
+until 1500 Finished!
+release KeyW
+frames 20
+save practice-results

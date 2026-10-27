@@ -1,0 +1,13 @@
+# Challenge › Sprinter (a 30 s tick cap) finished with the gas held.
+until 300 Hillwheel
+frames 150
+click Challenge. Special rules
+until 60 Sprinter
+frames 10
+click Sprinter — Short course
+until 120 m to the flag
+hold KeyW
+until 1500 Finished!
+release KeyW
+frames 20
+save sprinter-results

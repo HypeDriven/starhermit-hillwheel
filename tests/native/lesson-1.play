@@ -1,0 +1,28 @@
+# Quick play on a fresh profile starts lesson 1: its text on the countdown's first beat, then the gas
+# held to the green flag; the results offer the next lesson, which starts with its own text; Escape
+# pauses it and Quit to title returns to the title.
+until 300 Hillwheel
+frames 150
+click =Quick play — learn the basics
+until 60 Hold GAS
+frames 10
+save lesson-1-intro
+hold KeyW
+until 300 m to the flag
+frames 240
+save lesson-1-driving
+until 1200 Finished!
+release KeyW
+frames 20
+expect Give it throttle complete
+save lesson-1-results
+click =Next lesson
+until 120 Hold BRAKE
+frames 240
+key Escape 2
+until 60 Resume
+frames 10
+save lesson-2-paused
+click =Quit to title
+until 120 Quick play
+frames 10

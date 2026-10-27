@@ -1,13 +1,19 @@
 {
+  "name": "hillwheel",
+  "version": "1.0.0",
   "private": true,
+  "description": "Hillwheel — a side-on hill-climb driving game on the StarHermit engine.",
   "scripts": {
-    "test": "node test.js && node --test tests/gfx.test.mjs tests/platform.test.mjs tests/i18n.test.mjs",
-    "test:e2e": "node tests/e2e.mjs",
-    "test:review": "node tests/review-fixes.mjs"
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node test.js && node --test tests/i18n.test.mjs tests/progress.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
+    "serve": "node server.js"
   },
-  "dependencies": {
-    "esbuild": "^0.28.1",
-    "playwright": "^1.59.0",
-    "three": "^0.185.1"
+  "license": "SEE LICENSE IN LICENSE.md",
+  "devDependencies": {
+    "playwright-core": "^1.59.0"
   }
 }

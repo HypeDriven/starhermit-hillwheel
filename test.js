@@ -287,7 +287,9 @@ test('difficulty grows across journey', () => {
 
 console.log('== server API smoke ==');
 await testAsync('server endpoints: time, daily, score validation, leaderboard, achievements, save', async () => {
-	const port = 18931;
+	// A free loopback port (a fixed one may be taken by another process on the machine).
+	const net = await import('node:net');
+	const port = await new Promise((res) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
 	const proc = spawn(process.execPath, ['server.js'], { env: { ...process.env, PORT: String(port) }, stdio: 'pipe' });
 	const base = `http://127.0.0.1:${port}`;
 	try {

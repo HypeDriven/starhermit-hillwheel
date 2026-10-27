@@ -1,0 +1,34 @@
+# Journey › Stage 1 driven with the gas held to the flag (the score breakdown and the First Finish
+# achievement); Next stage starts Stage 2, which pauses and resumes, then quits to a title that
+# now offers Quick play — Stage 2.
+until 300 Hillwheel
+frames 150
+click Journey. 40 stages
+until 60 =Stage 1
+frames 10
+save journey
+click =Stage 1
+until 120 m to the flag
+hold KeyW
+until 1500 Finished!
+release KeyW
+frames 20
+expect Achievements: First Finish
+expect Time bonus
+save stage-1-results
+click =Next stage
+until 120 m to the flag
+frames 400
+key Escape 2
+until 60 Resume
+frames 10
+save stage-2-paused
+click =Resume
+frames 60
+key Escape 2
+until 60 Quit to title
+frames 10
+click =Quit to title
+until 120 Quick play — Stage 2
+frames 10
+save title-after

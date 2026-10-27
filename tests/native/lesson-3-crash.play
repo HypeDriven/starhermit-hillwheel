@@ -1,0 +1,19 @@
+# Lesson 3 (Mind your pitch) with the gas held and no tilt lands nose-first: the run is over with the
+# crash explained; Try again restarts the lesson.
+until 300 Hillwheel
+frames 150
+click Learn. Five short lessons
+until 60 Mind your pitch
+frames 10
+click =Mind your pitch
+until 120 TILT
+hold KeyW
+until 1200 Run over
+release KeyW
+frames 20
+expect You landed nose-first or too hard
+save lesson-3-crashed
+click =Try again
+until 120 m to the flag
+frames 60
+save lesson-3-again

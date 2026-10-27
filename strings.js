@@ -1,8 +1,8 @@
-// Hillwheel translation tables (see i18n.js).
+// Hillwheel translation tables (native/i18n.ts draws every string through them).
 // Each row: [English key, es-419, de-DE, fr-FR, pt-BR, it-IT]. en-GB, es-ES and
 // fr-CA list only where they differ from en-US, es-419 and fr-FR.
-// "Hillwheel" and "StarHermit" are names and stay as they are. The Graphics
-// panel strings live in gfx-i18n.js, the account strings in ui.js (SH_ALL).
+// "Hillwheel" and "StarHermit" are names and stay as they are. The account
+// strings live in account-strings.js (SH_ALL).
 
 const ROWS = [
 	// ---- title, menus, help
@@ -31,21 +31,17 @@ const ROWS = [
 	['TILT', 'INCLINAR', 'KIPPEN', 'INCLINER', 'INCLINAR', 'INCLINA'],
 	['Tilt back', 'Inclinar atrás', 'Nach hinten kippen', 'Incliner en arrière', 'Inclinar para trás', 'Inclina indietro'],
 	['Tilt forward', 'Inclinar adelante', 'Nach vorn kippen', 'Incliner en avant', 'Inclinar para a frente', 'Inclina avanti'],
-	['Hillwheel 3D scene', 'Escena 3D de Hillwheel', 'Hillwheel-3D-Szene', 'Scène 3D de Hillwheel', 'Cena 3D de Hillwheel', 'Scena 3D di Hillwheel'],
 	['syncing…', 'sincronizando…', 'wird synchronisiert …', 'synchronisation…', 'sincronizando…', 'sincronizzazione…'],
 	['saving…', 'guardando…', 'wird gespeichert …', 'enregistrement…', 'salvando…', 'salvataggio…'],
 	['synced', 'sincronizado', 'synchronisiert', 'synchronisé', 'sincronizado', 'sincronizzato'],
 	['offline', 'sin conexión', 'offline', 'hors ligne', 'offline', 'offline'],
-	['sync error', 'error de sincronización', 'Synchronisierungsfehler', 'erreur de synchronisation', 'erro de sincronização', 'errore di sincronizzazione'],
 	['Quick play — learn the basics', 'Partida rápida: aprende lo básico', 'Schnellstart – lerne die Grundlagen', 'Partie rapide — les bases', 'Jogo rápido — aprenda o básico', 'Partita rapida: impara le basi'],
 	['Quick play — {stage}', 'Partida rápida: {stage}', 'Schnellstart – {stage}', 'Partie rapide — {stage}', 'Jogo rápido — {stage}', 'Partita rapida: {stage}'],
-	['continue', 'continuar', 'weiter', 'continuer', 'continuar', 'continua'],
 	['Your first run is a two-minute lesson. Skip it any time from Journey below.', 'Tu primera partida es una lección de dos minutos. Sáltala cuando quieras desde Viaje.', 'Deine erste Fahrt ist eine Zwei-Minuten-Lektion. Überspring sie jederzeit über Reise unten.', 'Votre première course est une leçon de deux minutes. Passez-la à tout moment via Voyage ci-dessous.', 'Sua primeira corrida é uma lição de dois minutos. Pule quando quiser pela Jornada abaixo.', 'La prima corsa è una lezione di due minuti. Saltala quando vuoi da Viaggio qui sotto.'],
 	['Journey: {progress}', 'Viaje: {progress}', 'Reise: {progress}', 'Voyage : {progress}', 'Jornada: {progress}', 'Viaggio: {progress}'],
 	['Journey', 'Viaje', 'Reise', 'Voyage', 'Jornada', 'Viaggio'],
 	['Learn', 'Aprender', 'Lernen', 'Apprendre', 'Aprender', 'Impara'],
 	['Daily — {date}', 'Diario: {date}', 'Täglich – {date}', 'Quotidien — {date}', 'Diário — {date}', 'Giornaliera: {date}'],
-	['Daily', 'Diario', 'Täglich', 'Quotidien', 'Diário', 'Giornaliera'],
 	['Practice', 'Práctica', 'Training', 'Entraînement', 'Treino', 'Allenamento'],
 	['Challenge', 'Desafío', 'Herausforderung', 'Défi', 'Desafio', 'Sfida'],
 	['Controls: on-screen pedals — GAS, BRAKE, and TILT ◀ ▶ for the air.', 'Controles: pedales en pantalla: GAS, FRENO e INCLINAR ◀ ▶ en el aire.', 'Steuerung: Pedale auf dem Bildschirm – GAS, BREMSE und KIPPEN ◀ ▶ in der Luft.', 'Commandes : pédales à l’écran — GAZ, FREIN et INCLINER ◀ ▶ en l’air.', 'Controles: pedais na tela — ACEL., FREIO e INCLINAR ◀ ▶ no ar.', 'Comandi: pedali sullo schermo — GAS, FRENO e INCLINA ◀ ▶ in aria.'],
@@ -54,24 +50,15 @@ const ROWS = [
 	['Settings', 'Ajustes', 'Einstellungen', 'Paramètres', 'Ajustes', 'Impostazioni'],
 	['How to play', 'Cómo jugar', 'So wird gespielt', 'Comment jouer', 'Como jogar', 'Come si gioca'],
 	['Daily challenge', 'Desafío diario', 'Tägliche Herausforderung', 'Défi du jour', 'Desafio diário', 'Sfida giornaliera'],
-	['Select', 'Elegir', 'Auswahl', 'Choisir', 'Escolher', 'Scegli'],
 	['{label} 🔒', '{label} 🔒', '{label} 🔒', '{label} 🔒', '{label} 🔒', '{label} 🔒'],
 	// ---- settings
-	['Mute all', 'Silenciar todo', 'Alles stumm', 'Tout couper', 'Silenciar tudo', 'Disattiva tutto'],
-	['Music', 'Música', 'Musik', 'Musique', 'Música', 'Musica'],
-	['Sfx', 'Efectos', 'Effekte', 'Effets', 'Efeitos', 'Effetti'],
-	['Ambience', 'Ambiente', 'Atmosphäre', 'Ambiance', 'Ambiente', 'Ambiente'],
-	['Voice', 'Voz', 'Stimme', 'Voix', 'Voz', 'Voce'],
 	['Colour palette', 'Paleta de colores', 'Farbpalette', 'Palette de couleurs', 'Paleta de cores', 'Tavolozza colori'],
 	['Default', 'Predeterminada', 'Standard', 'Par défaut', 'Padrão', 'Predefinita'],
 	['Deuteranopia', 'Deuteranopía', 'Deuteranopie', 'Deutéranopie', 'Deuteranopia', 'Deuteranopia'],
 	['Protanopia', 'Protanopía', 'Protanopie', 'Protanopie', 'Protanopia', 'Protanopia'],
 	['Tritanopia', 'Tritanopía', 'Tritanopie', 'Tritanopie', 'Tritanopia', 'Tritanopia'],
-	['Reduced motion', 'Movimiento reducido', 'Weniger Bewegung', 'Animations réduites', 'Movimento reduzido', 'Movimento ridotto'],
 	['Left-handed pedals', 'Pedales para zurdos', 'Linkshänder-Pedale', 'Pédales pour gauchers', 'Pedais para canhotos', 'Pedali per mancini'],
 	['Hold to drive (off = toggle)', 'Mantener para conducir (desactivado = alternar)', 'Halten zum Fahren (aus = umschalten)', 'Maintenir pour rouler (désactivé = bascule)', 'Segurar para dirigir (desligado = alternar)', 'Tieni premuto per guidare (no = interruttore)'],
-	['Larger text', 'Texto más grande', 'Größere Schrift', 'Texte plus grand', 'Texto maior', 'Testo più grande'],
-	['High contrast', 'Alto contraste', 'Hoher Kontrast', 'Contraste élevé', 'Alto contraste', 'Contrasto elevato'],
 	['Share anonymous telemetry', 'Compartir telemetría anónima', 'Anonyme Telemetrie teilen', 'Partager une télémétrie anonyme', 'Compartilhar telemetria anônima', 'Condividi telemetria anonima'],
 	['or', 'o', 'oder', 'ou', 'ou', 'o'],
 	['Drive', 'Conducir', 'Fahren', 'Conduire', 'Dirigir', 'Guida'],
@@ -123,7 +110,6 @@ const ROWS = [
 	['Stage {n}', 'Etapa {n}', 'Etappe {n}', 'Étape {n}', 'Etapa {n}', 'Tappa {n}'],
 	['Mastery {n}', 'Maestría {n}', 'Meisterprüfung {n}', 'Maîtrise {n}', 'Maestria {n}', 'Maestria {n}'],
 	['Daily {date}', 'Diario {date}', 'Tagesstrecke {date}', 'Parcours du {date}', 'Diário {date}', 'Giornaliera {date}'],
-	['This game needs WebGL, which your browser or device has disabled. Your settings and progress are saved and will be here when WebGL is available.', 'Este juego necesita WebGL, que tu navegador o dispositivo tiene desactivado. Tu configuración y tu progreso están guardados y estarán aquí cuando WebGL esté disponible.', 'Dieses Spiel braucht WebGL, das dein Browser oder Gerät deaktiviert hat. Deine Einstellungen und dein Fortschritt sind gespeichert und warten hier, bis WebGL verfügbar ist.', 'Ce jeu nécessite WebGL, désactivé par votre navigateur ou appareil. Vos paramètres et votre progression sont enregistrés et vous attendront quand WebGL sera disponible.', 'Este jogo precisa de WebGL, que está desativado no seu navegador ou dispositivo. Suas configurações e seu progresso estão salvos e estarão aqui quando o WebGL estiver disponível.', 'Questo gioco richiede WebGL, disattivato dal browser o dal dispositivo. Impostazioni e progressi sono salvati e saranno qui quando WebGL sarà disponibile.'],
 	['{done}/{total} stages', '{done}/{total} etapas', '{done}/{total} Etappen', '{done}/{total} étapes', '{done}/{total} etapas', '{done}/{total} tappe'],
 	['{name} — ranked', '{name}: clasificatoria', '{name} – gewertet', '{name} — classé', '{name} — ranqueada', '{name}: classificata'],
 	['Easy hills', 'Colinas fáciles', 'Leichte Hügel', 'Collines faciles', 'Colinas fáceis', 'Colline facili'],
@@ -146,7 +132,6 @@ const ROWS = [
 	['Fuel low: ease off downhill and grab the yellow cans', 'Poco combustible: suelta el acelerador en las bajadas y recoge los bidones amarillos', 'Sprit knapp: bergab vom Gas gehen und gelbe Kanister sammeln', 'Carburant bas : levez le pied en descente et ramassez les bidons jaunes', 'Combustível baixo: alivie nas descidas e pegue os galões amarelos', 'Carburante basso: molla il gas in discesa e prendi le taniche gialle'],
 	['Checkpoint {n} of {total}', 'Punto de control {n} de {total}', 'Checkpoint {n} von {total}', 'Point de contrôle {n} sur {total}', 'Ponto de controle {n} de {total}', 'Checkpoint {n} di {total}'],
 	['Achievement unlocked: {name}', 'Logro desbloqueado: {name}', 'Erfolg freigeschaltet: {name}', 'Succès débloqué : {name}', 'Conquista desbloqueada: {name}', 'Obiettivo sbloccato: {name}'],
-	['Player {id}', 'Jugador {id}', 'Spieler {id}', 'Joueur {id}', 'Jogador {id}', 'Giocatore {id}'],
 	// ---- content: lessons and challenges
 	['Give it throttle', 'Dale gas', 'Gib Gas', 'Mettez les gaz', 'Acelere', 'Dai gas'],
 	['Hold GAS (↑ / W) to build speed. Reach the green flag.', 'Mantén GAS (↑ / W) para ganar velocidad. Llega a la bandera verde.', 'Halte GAS (↑ / W), um Tempo aufzubauen. Erreiche die grüne Flagge.', 'Maintenez GAZ (↑ / W) pour prendre de la vitesse. Atteignez le drapeau vert.', 'Segure ACEL. (↑ / W) para ganhar velocidade. Chegue à bandeira verde.', 'Tieni GAS (↑ / W) per prendere velocità. Raggiungi la bandiera verde.'],
@@ -166,6 +151,12 @@ const ROWS = [
 	['Violent terrain. Land smooth or not at all.', 'Terreno violento. Aterriza suave o no aterrices.', 'Brutales Gelände. Lande sanft oder gar nicht.', 'Terrain brutal. Atterrissez en douceur ou pas du tout.', 'Terreno violento. Pouse suave ou nem pouse.', 'Terreno violento. Atterra morbido o niente.'],
 	['Marathon', 'Maratón', 'Marathon', 'Marathon', 'Maratona', 'Maratona'],
 	['A long haul over the whole countryside.', 'Un largo recorrido por toda la campiña.', 'Eine lange Fahrt über das ganze Land.', 'Un long trajet à travers toute la campagne.', 'Uma longa viagem por todo o interior.', 'Un lungo viaggio attraverso tutta la campagna.'],
+	// ---- the engine port: the runtime's Options hold sound, graphics, language and accessibility
+	['Sound, graphics, language, reduced motion, high contrast and larger text are in the StarHermit Options.', 'El sonido, los gráficos, el idioma, el movimiento reducido, el alto contraste y el texto grande están en las Opciones de StarHermit.', 'Ton, Grafik, Sprache, reduzierte Bewegung, hoher Kontrast und größere Schrift findest du in den StarHermit-Optionen.', 'Le son, les graphismes, la langue, le mouvement réduit, le contraste élevé et le texte agrandi se trouvent dans les options StarHermit.', 'Som, gráficos, idioma, movimento reduzido, alto contraste e texto maior ficam nas Opções do StarHermit.', 'Audio, grafica, lingua, movimento ridotto, contrasto elevato e testo più grande sono nelle Opzioni di StarHermit.'],
+	['Open Options', 'Abrir opciones', 'Optionen öffnen', 'Ouvrir les options', 'Abrir opções', 'Apri opzioni'],
+	['Keyboard bindings', 'Teclas', 'Tastenbelegung', 'Touches du clavier', 'Teclas', 'Tasti'],
+	['Results', 'Resultados', 'Ergebnisse', 'Résultats', 'Resultados', 'Risultati'],
+	['Course progress', 'Progreso del recorrido', 'Streckenfortschritt', 'Progression sur le parcours', 'Progresso no percurso', 'Avanzamento sul percorso'],
 ];
 
 // Regional variants: only where they differ from en-US, es-419 and fr-FR.
