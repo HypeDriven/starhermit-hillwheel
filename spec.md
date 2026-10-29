@@ -16,7 +16,7 @@ green flag before the tank runs dry.
 | Genre | Side-on physics hill-climb driving, single player |
 | Players | 1, local; ranked comparison is asynchronous via the Daily |
 | Session length | 25–90 s per run; 5–10 min per sitting |
-| Platforms | The StarHermit engine 1.24.0 (host API 1.21): natively in the StarHermit client and in browsers through the engine's web runtime; desktop (keyboard, mouse, gamepad) and mobile (touch pedals), portrait and landscape |
+| Platforms | The StarHermit engine 1.26.1 (host API 1.28): natively in the StarHermit client and in browsers through the engine's web runtime; desktop (keyboard, mouse, gamepad) and mobile (touch pedals), portrait and landscape |
 | Rendering | `starhermit:scene` (three.js-like scene graph) for the hills; `starhermit:ui` (immediate mode) for every screen and the HUD |
 | Simulation | Fixed 60 Hz integer-quantized step on the runtime's fixed steps, seeded, replayable |
 
@@ -24,7 +24,7 @@ green flag before the tank runs dry.
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.24.0`, `engine.minor=19`, capabilities `platform,storage,clipboard`, the `control.*` actions and their `engine.gamepad.*` defaults |
+| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.26.1`, `engine.minor=28`, capabilities `platform,storage,clipboard`, the `control.*` actions and their `engine.gamepad.*` defaults |
 | `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (`starhermit package --web .`); never edited by hand |
 | `native/main.ts` | Entry: phase machine, fixed-step loop, countdown, input (actions, pedals by touch/mouse, hold or toggle), coaching, undo, achievements, progression, results, leaderboard posting, lifecycle |
 | `native/screens.ts` | Every screen, the HUD, pedal tray, countdown, pause and results panels, toast (`starhermit:ui`) |
@@ -315,7 +315,7 @@ cans stop bobbing and spinning, dust stops emitting, the sky and flags hold stil
 pulse stops.
 
 **Graphics.** ACES filmic tone mapping with sRGB output; a warm key sun with PCF shadows whose
-shadow follows the vehicle (`shadow.distance` 60 m);
+shadow follows the vehicle (the page's ±30 m `shadow.camera` box, texel-snapped);
 a hemisphere fill tinted by the theme sky and ground. The sky is a gradient dome framed for the
 gameplay camera, with a sun (a pale moon on dark themes) whose HDR core blooms, drifting low-poly
 clouds, and twinkling stars on dark themes. Image-based lighting comes from a `PMREMGenerator` +
@@ -350,11 +350,11 @@ A level change applies at once (shadow, post and environment settings; asset cha
 level's views from the same seed). The old per-effect overrides are not offered. The track profile and
 everything the vehicle touches are identical on every level.
 
-**Engine port notes.** Light intensities are three.js r185's ÷ π; the sky and the billboard particles
+**Engine port notes.** Light intensities are three.js r185's (minor 23+); the sky and the billboard particles
 (dust, sparkles, stars: an instanced quad turned to the camera, size/alpha in `instanceCustom`) are
 WGSL `ShaderMaterial`s; the terrain noise is a WGSL surface hook; the post chain is `renderer.ao`
 (GTAO), `bloom` (threshold 0.92, 2.2 on snow), `grade` (display space) and `antialias`; the shadow
-follows the vehicle by `shadow.distance` (60 m).
+follows the vehicle in the page's ±30 m `shadow.camera` box.
 
 **Visual assets the design calls for:** title key art (§15) and the platform cover; everything in
 the play scene is procedural by design, so no in-game textures or sprites are shipped.

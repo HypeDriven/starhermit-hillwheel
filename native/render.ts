@@ -14,14 +14,13 @@
 // follow camera with its look-ahead and event shake, and the key light whose
 // shadow follows the vehicle.
 //
-// From three.js: light intensities are three.js r185's ÷ π (the engine's
-// convention); ShaderMaterials are WGSL (the sky, and one instanced billboard
+// From three.js: light intensities are three.js r185's (minor 23+); ShaderMaterials are WGSL (the sky, and one instanced billboard
 // material for the dust, sparkles and stars, which were per-point-size
 // ShaderMaterial Points); the terrain's onBeforeCompile noise is a surface
 // hook; RoomEnvironment(renderer) gives the image-based lighting; the post
 // chain is renderer.ao / bloom / grade / antialias (GTAOPass, UnrealBloomPass
 // threshold 0.92, the GradeShader in display space, FXAA / SMAA / MSAA); the
-// shadow box (±30 units, texel-snapped) is the engine's `shadow.distance`.
+// shadow box (±30 units, texel-snapped) is the page's shadow.camera box.
 // Adaptive resolution, the pixel-ratio cap and the frame-rate readout are
 // the runtime's. Cosmetic randomness never touches the rules' streams.
 import {
@@ -30,13 +29,16 @@ import {
   IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial,
   PerspectiveCamera, PlaneGeometry, PMREMGenerator, Quaternion, RoomEnvironment, RoundedBoxGeometry, ShaderMaterial, SphereGeometry, Sprite,
   SpriteMaterial, SRGBColorSpace, TorusGeometry, Vector3, Vector4, renderer, scene,
-  FrontSide, type Material, type Object3D, type Side, type Texture,
+  FrontSide, type OrthographicCamera, type Material, type Object3D, type Side, type Texture,
 } from "starhermit:scene";
+import { frame } from "starhermit:engine";
 import { OffscreenCanvas, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
 import { Content, Rules, type State, type Theme, type Vehicle } from "./game.ts";
 import type { Look } from "./quality.ts";
 
 const PI = Math.PI;
+const UP = new Vector3(0, 1, 0);
+const shTmp = [new Vector3(), new Vector3(), new Vector3(), new Vector3()];
 // Authored framing constants (render.js CAM).
 const CAM = { back: 26, up: 12, lookUp: 3, lookAhead: 8, fov: 42, near: 0.5, far: 900 };
 const VEHICLE_CLEARANCE = 0.9;
@@ -78,19 +80,31 @@ function lightness(hex: number): number {
   return (Math.max(r, g, b) + Math.min(r, g, b)) / 2;
 }
 
-// -- lights and environment (three.js intensities ÷ π) -----------------------------------------
-const sun = new DirectionalLight(0xfff2dd, 2.0 / PI);
+// -- lights and environment (three.js r185 intensities, minor 23+) ---------------------------------
+const SHADOW_EXTENT = 30;
+const sun = new DirectionalLight(0xfff2dd, 2.0);
 sun.position.copy(SUN_DIR).multiplyScalar(120);
+{
+  const sc = sun.shadow.camera as OrthographicCamera;
+  sc.left = -SHADOW_EXTENT; sc.right = SHADOW_EXTENT; sc.top = SHADOW_EXTENT; sc.bottom = -SHADOW_EXTENT;
+  sc.near = 1; sc.far = 260;
+  sc.updateProjectionMatrix();
+}
 sun.shadow.bias = -0.0004;
-sun.shadow.distance = 60;
-const hemi = new HemisphereLight(0xbfd8e8, 0x6a7a5a, 0.9 / PI);
+sun.shadow.normalBias = 0.03;
+const hemi = new HemisphereLight(0xbfd8e8, 0x6a7a5a, 0.9);
 scene.add(sun, sun.target, hemi);
 scene.fog = new Fog(0xcfe8d8, 90, 620);
 
 let envTex: Texture | null = null;
 function envMap(): Texture | null {
   if (!envTex) {
-    try { envTex = new PMREMGenerator(renderer).fromScene(new RoomEnvironment(renderer), 0.04).texture; }
+    try {
+      // three r183+: RoomEnvironment(renderer) with the room lowered (engine environment-ports rule)
+      const room = new RoomEnvironment(renderer);
+      room.position.y = -3.5;
+      envTex = new PMREMGenerator(renderer).fromScene(room, 0.04).texture;
+    }
     catch (e) { console.warn(`environment: ${e instanceof Error ? e.message : String(e)}`); }
   }
   return envTex;
@@ -101,7 +115,7 @@ function applyEnv(): void {
   const on = !!look && look.reflections;
   scene.environment = on ? envMap() : null;
   scene.environmentIntensity = night ? 0.1 : 0.22;
-  hemi.intensity = (on ? 0.62 : 0.8) / PI;
+  hemi.intensity = on ? 0.62 : 0.8;
   for (const g of glossy) {
     g.m.envMap = on ? envMap() : null;
     g.m.envMapIntensity = g.env * (night ? 0.5 : 1);
@@ -831,6 +845,9 @@ export function setActive(on: boolean): void { renderer.camera = on ? camera : n
 // -- the frame ------------------------------------------------------------------------------------------------
 /** render.js update + render: prev/cur are the vehicle at the last two rules steps, alpha (0–1) between them. */
 export function update(prev: Vehicle | null, cur: Vehicle | null, alpha: number, state: State | null, dtIn: number): void {
+  // minor 20+: the camera renders with its own aspect (render.js resize)
+  const fr = frame(), aspect = fr.width / Math.max(1, fr.height);
+  if (aspect !== camera.aspect) { camera.aspect = aspect; camera.updateProjectionMatrix(); }
   const dt = Math.min(0.25, Math.max(0, dtIn));
   const animated = !!look && look.animatedSky && !reducedMotion;
   if (animated) skyTime += dt;
@@ -923,7 +940,16 @@ function frameLevel(prev: Vehicle, cur: Vehicle, alpha: number, state: State, dt
   camera.position.set(camPos.x + sx, Math.max(camPos.y, groundY + 4) + sy, camPos.z);
   camTarget.set(x, groundY + CAM.lookUp, 0);
   camera.lookAt(camTarget);
-  // The key light follows the play area around the vehicle.
-  sun.target.position.set(x + 6, groundY, 0);
+  // The key light's shadow box follows the play area around the vehicle, snapped to whole
+  // texels so it does not shimmer as the camera moves (render.js _fitShadow).
+  const size = look && look.shadows > 0 ? look.shadows : 1024;
+  const texel = (SHADOW_EXTENT * 2) / size;
+  const fwd = shTmp[0]!.copy(SUN_DIR).negate();
+  const right = shTmp[1]!.crossVectors(fwd, UP).normalize();
+  const up = shTmp[2]!.crossVectors(right, fwd);
+  const p = shTmp[3]!.set(x + 6, groundY, 0);
+  const pr = p.dot(right), pu = p.dot(up), pf = p.dot(fwd);
+  sun.target.position.copy(right.multiplyScalar(Math.round(pr / texel) * texel))
+    .add(up.multiplyScalar(Math.round(pu / texel) * texel)).add(fwd.multiplyScalar(pf));
   sun.position.copy(sun.target.position).addScaledVector(SUN_DIR, 120);
 }
