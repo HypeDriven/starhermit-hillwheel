@@ -6,7 +6,7 @@
     "content.js": {"sha256": "d8b3492ebf7f3ae8e342c93bc08131e3cf4123b2f41b016b4fc7ce4e0955da70", "size": 10140},
     "cover.jpg": {"sha256": "a5deac0c7382494c47a7aef391c8251f50affe029a3b2e9a7c2c5070536dc936", "size": 180505},
     "icon.png": {"sha256": "0961cd9ae836e706c03337731933a66b49048beed74316f3393ae7a61eb2a49e", "size": 7816},
-    "index.html": {"sha256": "c4f8e387683ff3df4e1b338a725d525ce74027eded7ab1e666e76f2e79e9caf3", "size": 1774},
+    "index.html": {"sha256": "abd307955bae2a73cb4557d4fc393d448bb85efb16ed1dd207de8fa2c710251e", "size": 1774},
     "native/audio.ts": {"sha256": "b9f09b93777e7d56877881fb2300bd4a3ad71592caaa42cb7cc556d71f3cf1ba", "size": 7799},
     "native/game.ts": {"sha256": "11930d384ed071c4c1bf92ee2cb7b2ae588f078b466a8fded0b8bf8687009f29", "size": 3739},
     "native/i18n.ts": {"sha256": "ea55c47fd016fd66e8061190e62f3ccf8b93c8aaba06f86169345653168d3a20", "size": 3382},
@@ -37,7 +37,7 @@
     "sfx/ui-click.opus": {"sha256": "c2f274ba00f1765cbdc13def8ffd50f863e16e5f6d62664ad7ca356c1fa5c170", "size": 11002},
     "sfx/vehicle-crash.opus": {"sha256": "2eea3b2ead09089aab4d2cdd06cd43afba2e62ca85e25dc7d1233e8bcacfd052", "size": 27677},
     "sfx/wind-ambience.opus": {"sha256": "801099cfbbdc14598506f8dc22ec25ab388ad7ce9c8cad05d02c963252cf91ec", "size": 70879},
-    "starhermit.txt": {"sha256": "319b36535d8fd76671e0a4ba5ee0c4e9c77c9a6f2f2c011a8116bce6c006fd49", "size": 1700},
+    "starhermit.txt": {"sha256": "b7d5d72abb5517ea690629b57a2fabdc65bf3dc1f3caa897a7252190adf7fcda", "size": 1700},
     "strings.js": {"sha256": "88a5d175e8f795dfc3ee171ecdfb8e6d0f3464f4eaffe84a027482ef194be1da", "size": 29841}
   },
   "excluded": ["LICENSE.md", "coverart.png", "data/", "node_modules/", "package-lock.json", "package.json", "server.js", "sfx/manifest.json", "sfx/manifest.md", "sfx/manifest.txt", "spec.md", "test.js", "tests/", "tools/", "tsconfig.json"],
