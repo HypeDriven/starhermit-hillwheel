@@ -16,7 +16,7 @@ green flag before the tank runs dry.
 | Genre | Side-on physics hill-climb driving, single player |
 | Players | 1, local; ranked comparison is asynchronous via the Daily |
 | Session length | 25–90 s per run; 5–10 min per sitting |
-| Platforms | The StarHermit engine 1.27.0 (host API 1.29): natively in the StarHermit client and in browsers through the engine's web runtime; desktop (keyboard, mouse, gamepad) and mobile (touch pedals), portrait and landscape |
+| Platforms | The StarHermit engine 1.28.0 (host API 1.30): natively in the StarHermit client and in browsers through the engine's web runtime; desktop (keyboard, mouse, gamepad) and mobile (touch pedals), portrait and landscape |
 | Rendering | `starhermit:scene` (three.js-like scene graph) for the hills; `starhermit:ui` (immediate mode) for every screen and the HUD |
 | Simulation | Fixed 60 Hz integer-quantized step on the runtime's fixed steps, seeded, replayable |
 
@@ -24,7 +24,7 @@ green flag before the tank runs dry.
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.27.0`, `engine.minor=29`, capabilities `platform,storage,clipboard`, the `control.*` actions and their `engine.gamepad.*` defaults |
+| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.28.0`, `engine.minor=30`, capabilities `platform,storage,clipboard`, the `control.*` actions and their `engine.gamepad.*` defaults |
 | `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (`starhermit package --web .`); never edited by hand |
 | `native/main.ts` | Entry: phase machine, fixed-step loop, countdown, input (actions, pedals by touch/mouse, hold or toggle), coaching, undo, achievements, progression, results, leaderboard posting, lifecycle |
 | `native/screens.ts` | Every screen, the HUD, pedal tray, countdown, pause and results panels, toast (`starhermit:ui`) |

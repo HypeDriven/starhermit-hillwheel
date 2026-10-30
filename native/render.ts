@@ -817,7 +817,7 @@ export function applyLook(next: Look): void {
   // render.js GradeShader (display space, after the output): a gentle S-curve, +7 % saturation, warm
   // highlights and cool shadows, the 0.2 vignette.
   renderer.grade = next.grade ? {
-    space: "display", contrast: 0.09, saturation: 1.07,
+    space: "display", contrastCurve: "s", contrast: 0.18, saturation: 1.07,
     shadows: [0.97, 0.99, 1.04], highlights: [1.03, 1.0, 0.97], split: [0.2, 0.8],
     vignette: { amount: 0.2, inner: 0.4, outer: 0.9, scale: [1.1, 1] },
   } : null;
