@@ -330,9 +330,13 @@ sparkle burst when a can is collected. Clouds, star twinkle and flag waves stop 
 motion or on the Low level (still sky).
 
 **Graphics levels.** The runtime's Options › Graphics owns Auto/level choice, render scale,
-adaptive resolution, the frame-rate limit and readout. `native/quality.ts` maps its quality tier
-(`frame().quality`) to the browser build's presets and its level (`frame().levelIndex`) scales tree
-and particle counts within the tier (at most 2×):
+adaptive resolution, the frame-rate limit and readout. The engine-owned effects (shadows and their
+map size, ambient occlusion, bloom, the grade, anti-aliasing) are the level's own (`levelSettings()`,
+the table every StarHermit game reads); `native/quality.ts` maps the level's quality tier to the
+browser build's art presets, and the level's particle budget against the tier's anchor level scales
+tree and particle counts within the tier (at most 2×). At the anchors (quantum, molecular,
+terrestrial, galactic; higher levels within a tier get more, e.g. stellar's 4096² shadows and
+full-resolution AO; the terrain casts shadows on Ultra):
 
 | | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
@@ -371,8 +375,8 @@ visual counterpart (HUD number, flag colour, shake, banner).
 **Buses.** The runtime's `music`, `effects` and `interface` buses (Options › Audio: volumes, mute,
 voice limit). Music → music, effects and the wind bed → effects, the menu click → interface; the old
 default levels (music 70 %, effects 80 %, ambience 60 %) are folded into each sound's gain. Sound
-holds while paused or the window is hidden. Clips load one at a time once the mixer runs (in a
-browser after the first press).
+holds while paused or the window is hidden. Every clip loads at once at start; the bed, the hum and
+the motif wait for the mixer to run (in a browser, after the first press).
 
 **Music.** A quiet six-note triangle motif on the `music` bus, started at "go" and stopped when
 the run resolves. **Ambience.** `wind-ambience.opus` loops on the `ambience` bus for the whole

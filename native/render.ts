@@ -655,11 +655,13 @@ function applyShadowFlags(): void {
   const on = !!look && look.shadows > 0;
   renderer.shadowMap.enabled = on;
   sun.castShadow = on;
+  // The level's map size: at engine.minor ≥ 23 the engine keeps whatever the game sets.
   if (on) sun.shadow.mapSize = look!.shadows;
   const lv = level;
   if (!lv) return;
   lv.ground.receiveShadow = on;
-  lv.ground.castShadow = !!look && look.shadows >= 4096;
+  // The terrain's self-shadowing is the Ultra preset's (art; the old table gave only Ultra 4096 maps).
+  lv.ground.castShadow = on && look!.preset === "ultra";
   for (const o of lv.casters) { o.castShadow = on; o.receiveShadow = on; }
   for (const o of lv.receivers) o.receiveShadow = on;
 }
@@ -809,9 +811,11 @@ export function applyLook(next: Look): void {
   if (look && JSON.stringify(look) === JSON.stringify(next)) return;
   const before = look;
   look = next;
-  renderer.ao = next.ao === "off" ? null : {
-    blendIntensity: 0.7, radius: 1.2, distanceExponent: 1.5, thickness: 1.5, scale: 1.0, samples: next.ao === "high" ? 16 : 8, resolution: next.budget.aoRes,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+  // The level's AO; full resolution is the engine's "high" (the old Ultra's wider denoise).
+  const ao = next.ao, full = !!ao && ao.resolution >= 1;
+  renderer.ao = ao && {
+    blendIntensity: 0.7, radius: 1.2, distanceExponent: 1.5, thickness: 1.5, scale: 1.0, samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: full ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   applyBloom();
   // render.js GradeShader (display space, after the output): a gentle S-curve, +7 % saturation, warm
@@ -835,7 +839,7 @@ export function applyLook(next: Look): void {
 }
 /** High threshold: only the sun, lights, cans, the goal flag and sparkles bloom (raised on snow). */
 function applyBloom(): void {
-  renderer.bloom = look?.bloom ? { strength: 0.42, radius: 0.45, threshold: lightness(theme.ground) > 0.7 ? 2.2 : 0.92, resolution: look.budget.bloomRes } : null;
+  renderer.bloom = look && look.bloom !== null ? { strength: 0.42, radius: 0.45, threshold: lightness(theme.ground) > 0.7 ? 2.2 : 0.92, resolution: look.bloom } : null;
 }
 export function setReducedMotion(on: boolean): void { reducedMotion = on; }
 /** The title's backdrop: the Meadow sky without a level. */

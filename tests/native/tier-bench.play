@@ -1,0 +1,16 @@
+# Graphics-tier bench (tools/engine-tier-bench.mjs): Journey stage 1 driven with the gas held,
+# measured while the vehicle climbs the course (terrain, trees, rocks, cans, dust, the sky, the
+# shadow box following the vehicle).
+until 300 Hillwheel
+frames 150
+click Journey. 40 stages
+until 60 =Stage 1
+frames 10
+click =Stage 1
+until 120 m to the flag
+hold KeyW
+frames 120
+measure start
+frames 480
+measure stop
+release KeyW
