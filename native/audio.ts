@@ -16,9 +16,9 @@
 // live synthesis graph makes clip loads fail on the engine's web runtime.
 // The motif's notes are rendered into clips with the old oscillator envelope.
 // The synthesized stand-ins the browser build played while a clip decoded
-// are not ported, so a clip still loading is silent. Clips load once the
-// mixer runs (natively at once, in a browser after the first press), one at
-// a time.
+// are not ported, so a clip still loading is silent. Every clip loads at
+// once in onStart; the rendered notes and hum, the bed and the motif wait for
+// the mixer to run (in a browser, after the first press).
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus, type Sound } from "starhermit:audio";
 
 const LEVEL = { music: 0.7, effects: 0.8, ambience: 0.6 };
@@ -42,20 +42,14 @@ const AMBIENCE_CLIP = "wind-ambience";
 const INTERFACE = new Set(["click"]);
 
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [];
-let loading = false;
-let wantClips = false;
 let suspended = false;
 
-function load(name: string): void { if (!queue.includes(name) && !clips.has(name)) queue.push(name); }
-function pump(): void {
-  if (loading || !queue.length) return;
-  const name = queue.shift()!;
-  loading = true;
-  loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
+/** Loads every clip at once (onStart); an event whose clip is still loading is silent. */
+export function loadSfx(): void {
+  for (const name of [...new Set(Object.values(EVENT_SAMPLES).flat()), AMBIENCE_CLIP]) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  }
 }
-/** Asks for the clips; they load once the mixer runs (see update). */
-export function loadSfx(): void { wantClips = true; }
 
 /** audio.js event(): an event's sample (once loaded); `variant` picks among several. */
 export function event(name: string, opts: { variant?: number } = {}): void {
@@ -66,7 +60,7 @@ export function event(name: string, opts: { variant?: number } = {}): void {
   if (!clip) return;
   const bus: Bus = INTERFACE.has(name) ? "interface" : "effects";
   try { playClip(clip, { bus, gain: LEVEL.effects }); }
-  catch { clips.delete(file); load(file); } // a clip the mixer lost: load it again
+  catch { /* the mixer is full this frame: skip it */ }
 }
 
 // -- rendered clips -------------------------------------------------------------------
@@ -126,18 +120,10 @@ export function setEngine(on: boolean, speed = 0, throttle = 0): void { engine =
 /** Pause and a hidden window: the hum, the motif and the bed hold. */
 export function setSuspended(on: boolean): void { suspended = on; }
 
-/** Each frame: the clips once the mixer runs (one at a time), the notes and the hum rendered one a
- * frame after them, the bed and the hum by state, then the motif's notes by mixer time. */
+/** Each frame once the mixer runs: the notes and the hum rendered one a frame, the bed and the hum
+ * by state, then the motif's notes by mixer time. */
 export function update(): void {
   if (context.state !== "running") return;
-  if (wantClips) {
-    wantClips = false;
-    for (const list of Object.values(EVENT_SAMPLES)) for (const name of list) load(name);
-    load(AMBIENCE_CLIP);
-    return;
-  }
-  pump();
-  if (loading || queue.length) return;
   if (!hum) { hum = humClip(); return; }
   for (const f of new Set(MOTIF)) if (!notes.has(f)) { notes.set(f, noteClip(f, 0.5)); return; }
   try {

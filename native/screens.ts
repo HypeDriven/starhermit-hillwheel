@@ -59,19 +59,9 @@ function button(b: Btn, width: number | null = null): void {
 }
 /** Buttons at their own widths in rows that wrap at `width` (CSS flex-wrap). */
 function flow(label: string, list: Btn[], width: number, gap = 8, align: "start" | "center" = "start"): void {
-  const rows: Btn[][] = [[]];
-  let used = 0;
-  for (const b of list) {
-    const bw = Math.min(width, buttonWidth(b.text, b.style ?? "btn"));
-    if (rows[rows.length - 1]!.length && used + gap + bw > width) { rows.push([]); used = 0; }
-    used += (rows[rows.length - 1]!.length ? gap : 0) + bw;
-    rows[rows.length - 1]!.push(b);
-  }
-  ui.column(label, () => {
-    rows.forEach((row, ri) => ui.row(`${label}-r${ri}`, () => {
-      for (const b of row) button(b, buttonWidth(b.text, b.style ?? "btn") > width ? width : null);
-    }, { spacing: gap, align: "center" }));
-  }, { spacing: gap, align, width });
+  ui.row(label, () => {
+    for (const b of list) button(b, buttonWidth(b.text, b.style ?? "btn") > width ? width : null);
+  }, { wrap: true, width, gap, justify: align, align: "center" });
 }
 /** Text up to `width` wide: one label when it fits, else a paragraph. */
 function para(text: string, width: number, cls = "body", id?: string, center = false): void {
@@ -378,7 +368,7 @@ function hudTop(L: Layout): void {
     pauseButton();
     ui.column("hud-objective", () => {
       const cls = textWidth(obj, "hud-obj") <= objW ? "hud-obj" : "hud-obj-small";
-      ui.style(cls).id("hud-objective-text").label(fitText(obj, cls, objW));
+      ui.style(cls, { width: objW, text: { overflow: "ellipsis" } }).id("hud-objective-text").label(obj);
       courseTrack(Math.min(320, objW - 8));
     }, { spacing: 4, width: objW });
     if (showMirror) ui.style("hud-mirror").id("hud-mirror").label(app.mirror);
@@ -391,13 +381,6 @@ function hudTop(L: Layout): void {
       ui.style("hud-score").id("hud-score-value").label(score);
     }, { spacing: 3, align: "end", width: scoreW });
   }, { spacing: gap, align: "center", width: L.lw - 2 * padX }));
-}
-/** Cuts a text to fit `width` with an ellipsis (style.css text-overflow: ellipsis). */
-function fitText(text: string, cls: string, width: number): string {
-  if (textWidth(text, cls) <= width) return text;
-  let t = text;
-  while (t.length > 1 && textWidth(t + "…", cls) > width) t = t.slice(0, -1);
-  return t + "…";
 }
 function pauseButton(): void {
   // The ❚❚ button (ui.js buildHud): two drawn bars, named "Pause".
