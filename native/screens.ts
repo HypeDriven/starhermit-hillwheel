@@ -17,7 +17,7 @@ import { requestRebind } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
 import { Content, Rules } from "./game.ts";
-import { account, N, T } from "./i18n.ts";
+import { sh, N, T } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import { PALETTES, type Palette } from "./platform.ts";
 import {
@@ -30,10 +30,9 @@ import {
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; desktop: boolean; phone: boolean; shortLand: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const sc = v.scale;
+  const lw = Math.max(1, v.width), lh = Math.max(1, v.height);
   const shortLand = lw > lh && lh <= 500;
   return { lw, lh, sc, desktop: lw >= 1024, phone: !shortLand && lw <= 640 && lh >= lw, shortLand };
 }
@@ -103,7 +102,6 @@ export function drawScreens(): void {
     case "leaderboard": page("leaderboard", L, leaderboardScreen); break;
     case "game": gameScreen(L); break;
   }
-  toast(L);
   if (app.focusNext) {
     const age = f.frame - app.openedFrame;
     if (age >= 1) ui.setFocus(app.focusNext);
@@ -187,14 +185,13 @@ function titleScreen(w: number): void {
         gas: keysFor("throttle", "/"), brake: keysFor("brake", "/"), tiltL: keysFor("tilt_back", "/"), tiltR: keysFor("tilt_forward", "/"), pause: keysFor("pause", "/"),
       }), w, "strip-text", "controls-text");
   }, { style: "strip", width: w });
-  const t = account();
   const row: Btn[] = [
     { id: "btn-leaderboards", text: T("Leaderboards"), style: "btn-small", act: showLeaderboard },
     { id: "btn-settings", text: T("Settings"), style: "btn-small", act: () => openPage("settings") },
     { id: "btn-help", text: T("How to play"), style: "btn-small", act: () => openPage("help") },
   ];
-  if (platform.inviteLink()) row.push({ id: "btn-invite", text: t.invite, style: "btn-small", act: copyInvite });
-  if (!platform.signedIn()) row.push({ id: "btn-signin", text: t.signIn, style: "btn-small", act: signIn });
+  if (platform.inviteLink()) row.push({ id: "btn-invite", text: sh("invite"), style: "btn-small", act: copyInvite });
+  if (!platform.signedIn()) row.push({ id: "btn-signin", text: sh("signIn"), style: "btn-small", act: signIn });
   flow("title-row", row, w);
 }
 
@@ -546,12 +543,3 @@ function resultsPanel(L: Layout): void {
   }, () => { app.openedFrame = frame().frame; /* the results stay until a choice is made */ });
 }
 
-// ------------------------------------------------------------------ the toast
-function toast(L: Layout): void {
-  const t = app.toast;
-  if (!t) return;
-  const w = Math.min(L.lw - 32, 520);
-  const top = L.phone || L.shortLand;
-  const text = t.text();
-  ui.place("toast", { anchor: top ? "top" : "bottom", y: 16 }, () => ui.column("toast-col", () => para(text, w - 32, "toast-text", "toast-text", true), { style: "toast", align: "center" }));
-}

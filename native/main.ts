@@ -24,7 +24,7 @@ import * as ui from "starhermit:ui";
 import { onSessionEnded, requestSignIn } from "starhermit:platform";
 import { Content, Rules, Sess, type Breakdown, type Config, type Daily, type Result, type Session, type State, type Tutorial, type Vehicle } from "./game.ts";
 import * as audio from "./audio.ts";
-import { account, N, T } from "./i18n.ts";
+import { sh, N, T } from "./i18n.ts";
 import * as platform from "./platform.ts";
 import { lookFor } from "./quality.ts";
 import * as render from "./render.ts";
@@ -82,7 +82,6 @@ export const app = {
   lb: null as { posted: boolean; rank: number | null } | "posting" | null,
   board: null as { loading: boolean; entries: { name: string; score: number; me?: boolean }[] | null } | null,
   mirror: "",
-  toast: null as { text: () => string; until: number } | null,
   daily: null as Daily | null,
 };
 export const settings = platform.settings;
@@ -93,10 +92,14 @@ const now = (): number => frame().time;
 export function announce(text: string, assertive = false): void {
   if (text) ui.announce(text.slice(0, 500), { politeness: assertive ? "assertive" : "polite" });
 }
-/** ui.js toast(): 3.5 s over any screen. */
-export function toast(text: () => string): void {
-  app.toast = { text, until: now() + 3.5 };
-  announce(text());
+/** ui.js toast(): one at a time, 3.5 s over any screen; at the top on a phone or a short landscape window (the pedals are below). */
+let lastToast: ReturnType<NonNullable<typeof ui.toast>> = null;
+export function toast(text: string): void {
+  const v = ui.viewport!();
+  const shortLand = v.width > v.height && v.height <= 500;
+  const top = shortLand || (v.width <= 640 && v.height >= v.width);
+  lastToast?.dismiss();
+  lastToast = ui.toast!(text, { duration: 3.5, style: ["toast", "toast-text"], dismissible: false, position: top ? "top" : "bottom" });
 }
 export function click(): void { audio.event("click"); }
 export function progress(): platform.Progress { return platform.progress(); }
@@ -319,8 +322,8 @@ export function copyInvite(): void {
   click();
   const link = platform.inviteLink();
   if (!link) return;
-  try { clipboard.writeText(link); toast(() => account().copied); }
-  catch { toast(() => account().copyFailed.replace("{link}", link)); }
+  try { clipboard.writeText(link); toast(sh("inviteCopied")); }
+  catch { toast(sh("inviteLink", { link })); }
 }
 export function signIn(): void { click(); void requestSignIn().catch(() => undefined); }
 
@@ -565,9 +568,8 @@ function postToLeaderboard(total: number): void {
 export function leaderboardLine(): string | null {
   const r = app.lb;
   if (!r) return null;
-  const t = account();
-  if (r === "posting") return t.lbPosting;
-  return !r.posted ? t.lbNotPosted : r.rank ? t.lbRank.replace("{rank}", String(r.rank)) : t.lbPosted;
+  if (r === "posting") return sh("leaderboardPosting");
+  return !r.posted ? sh("leaderboardNotPosted") : r.rank ? sh("leaderboardRank", { rank: r.rank }) : sh("leaderboardPosted");
 }
 
 // ------------------------------------------------------------------ boot and lifecycle
@@ -592,7 +594,7 @@ onStart(() => {
   showTitle();
 });
 onPreferencesChange((p) => render.setReducedMotion(p.reducedMotion));
-onSessionEnded(() => toast(() => account().signedOut));
+onSessionEnded(() => toast(sh("signedOut")));
 let hidden = false;
 onSuspend(() => {
   hidden = true;
@@ -631,7 +633,6 @@ onUpdate((dt) => {
     audio.setEngine(!s.state.terminalReason, v.vx, lastInput.throttle / 1000);
   }
   audio.update();
-  if (app.toast && app.toast.until < now()) app.toast = null;
 });
 onRender((alpha) => {
   pedalRects.clear();

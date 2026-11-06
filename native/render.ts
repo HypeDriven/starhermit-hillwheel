@@ -790,6 +790,7 @@ function updateParticles(dt: number): void {
     colA[n * 3] = d.r; colA[n * 3 + 1] = d.gg; colA[n * 3 + 2] = d.b;
     n++;
   }
+  if (n === 0 && mesh.count === 0) return; // nothing alive, nothing to upload
   mesh.count = n;
   mesh.instanceMatrix.needsUpdate = true;
   mesh.instanceCustom!.needsUpdate = true;

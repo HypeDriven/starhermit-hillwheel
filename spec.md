@@ -35,7 +35,7 @@ green flag before the tank runs dry.
 | `native/i18n.ts`, `native/style.ts`, `native/game.ts` | Language, the converted style sheet and high-contrast tokens, typed facade over the pure modules |
 | `rules.js`, `content.js`, `session.js` | Pure rules, content and session, unchanged from the browser build (ES modules, imported with `allowJs`) |
 | `progress.js` | Progress document: defaults, normalise, two-device merge, reading the browser build's cloud save |
-| `strings.js`, `account-strings.js` | Translation tables (nine locales) and the account strings |
+| `assets/strings.json` | Translation tables (nine locales) for the engine's `strings`; the account lines are the engine's `starhermit.*` keys |
 | `score-script.js` | StarHermit platform script (`server=`): range-checks a finished run's total and posts it to the `high-score` board |
 | `server.js` | Local dev server: static serving + `/api/v1/*`, replay-validated scores (exercised by `test.js` only; not packaged) |
 | `tools/ui-style.css` → `assets/ui-style.json` | The style sheet, class-based, converted by `npm run css` (`starhermit css`) |
@@ -406,7 +406,7 @@ on the web runtime). The can pickup picks its variant from the run's can count.
 | `go` | `go-horn.opus` | Punchy toy air-horn | Countdown reaches zero |
 | `ambience` | `wind-ambience.opus` | Breeze over grassy hills with distant birds | Looped on the ambience bus during a run |
 
-Engine hum: one period-exact loop of a low-passed 50 Hz sawtooth is rendered once (`createClip`) and
+Engine hum: one period-exact loop of a low-passed 50 Hz sawtooth is rendered once offline (`OfflineAudioContext`) and
 played looping; each frame its pitch follows `55 + |vx|·4 + throttle·40` Hz and its level
 `0.05 + throttle·0.06` (the filter cutoff moves with the pitch rather than separately). The motif's
 notes are rendered clips too.
@@ -420,8 +420,8 @@ player-facing string — title, mode cards, setup lists, HUD (objective, fuel, s
 pedal labels and aria-labels), coaching lines, countdown, pause, settings, help, results, end
 reasons, leaderboards, toasts and live-region announcements, plus the content names (lessons and
 their intros, challenges, "Stage n"/"Mastery n", "Daily <date>", achievements) — is an English
-key in `strings.js` with es-419, de-DE, fr-FR, pt-BR and it-IT translations; en-GB, es-ES and fr-CA
-carry only their differences (fr-CA "Pointage"). The account strings (`account-strings.js`) keep their own nine-locale table and follow the same
+key in `assets/strings.json` with es-419, de-DE, fr-FR, pt-BR and it-IT translations; en-GB, es-ES and fr-CA
+carry only their differences (fr-CA "Pointage"). The account strings are the engine's `starhermit.*` keys, which have their own nine-locale table and follow the same
 language.
 "Hillwheel" and "StarHermit" are not translated; distances and scores are plain integers.
 
@@ -468,8 +468,7 @@ Through `starhermit:platform` / `starhermit:storage` (`native/platform.ts`):
 - **Server time** — `serverTime()`/`serverNow()` give the Daily's UTC date; offline the device clock.
 - **Invite** — **Invite a friend** (signed in) copies `inviteLink()` to the clipboard with a toast.
 - **Leaderboard posting** — signed in, every finished run except Learn lessons posts its total
-  through `score-script.js` (a practice session whose socket sends `{ type: 'result', scores }`; the
-  script range-checks 0–20,000 into `high-score`), and the results show "Leaderboard rank: #N" (or
+  through `leaderboards.submitScore` (`score-script.js` range-checks 0–20,000 into `high-score`), and the results show "Leaderboard rank: #N" (or
   posted / not posted). Guests post nothing.
 - **Leaderboards screen** — signed in, the `high-score` board's top 20; a guest sees their own best
   Daily scores (local), as standalone did.

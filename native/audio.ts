@@ -11,15 +11,14 @@
 // levels (music 70 %, effects 80 %, ambience 60 %) are folded into each
 // sound's gain. The hum was a live sawtooth through a low-pass filter; here
 // one period-exact loop of that filtered sawtooth is rendered once
-// (createClip) and played looping, its pitch (setPitch) following
-// 55 + |vx|·4 + throttle·40 Hz and its level (fade) 0.05 + throttle·0.06 — a
-// live synthesis graph makes clip loads fail on the engine's web runtime.
-// The motif's notes are rendered into clips with the old oscillator envelope.
+// offline (OfflineAudioContext) and played looping, its pitch (setPitch) following
+// 55 + |vx|·4 + throttle·40 Hz and its level (fade) 0.05 + throttle·0.06.
+// The motif's notes are rendered offline with the old oscillator envelope.
 // The synthesized stand-ins the browser build played while a clip decoded
-// are not ported, so a clip still loading is silent. Every clip loads at
-// once in onStart; the rendered notes and hum, the bed and the motif wait for
-// the mixer to run (in a browser, after the first press).
-import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus, type Sound } from "starhermit:audio";
+// are not ported, so a clip still loading is silent. Every clip loads and
+// the notes and hum render at once in onStart; the bed, the hum and the motif
+// wait for the mixer to run (in a browser, after the first press).
+import { context, createClip, loadClip, OfflineAudioContext, play as playClip, type AudioClip, type Bus, type Sound } from "starhermit:audio";
 
 const LEVEL = { music: 0.7, effects: 0.8, ambience: 0.6 };
 const EVENT_SAMPLES: Record<string, string[]> = {
@@ -49,6 +48,7 @@ export function loadSfx(): void {
   for (const name of [...new Set(Object.values(EVENT_SAMPLES).flat()), AMBIENCE_CLIP]) {
     loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
   }
+  renderClips();
 }
 
 /** audio.js event(): an event's sample (once loaded); `variant` picks among several. */
@@ -65,33 +65,38 @@ export function event(name: string, opts: { variant?: number } = {}): void {
 
 // -- rendered clips -------------------------------------------------------------------
 const RATE = 22050;
-/** audio.js _blip(): an oscillator at `gain`, exponential to 0.001 at `dur`. */
-function noteClip(freq: number, dur: number): AudioClip {
-  const n = Math.round((dur + 0.02) * RATE);
-  const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const t = i / RATE;
-    const ph = (freq * t) % 1;
-    const osc = 1 - 4 * Math.abs(ph - 0.5); // triangle
-    out[i] = t < dur ? osc * Math.pow(0.001, t / dur) : 0;
-  }
-  return createClip([out], RATE);
+/** audio.js _blip(): a triangle, exponential from 1 to 0.001 at `dur`. */
+async function renderNote(freq: number, dur: number): Promise<AudioClip> {
+  const off = new OfflineAudioContext(1, Math.round((dur + 0.02) * RATE), RATE);
+  const osc = off.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.value = freq;
+  const g = off.createGain();
+  g.gain.setValueAtTime(1, 0);
+  g.gain.exponentialRampToValueAtTime(0.001, dur);
+  osc.connect(g).connect(off.destination);
+  osc.start();
+  osc.stop(dur);
+  return createClip(await off.startRendering());
 }
-/** The hum's loop: a 50 Hz sawtooth (441 samples a period) through a one-pole low-pass near the old
- * idle cutoff (300 Hz at 55 Hz), settled, then whole periods so the loop is seamless. */
+/** The hum's loop: a 50 Hz sawtooth (441 samples a period) through a low-pass near the old idle
+ * cutoff (300 Hz at 55 Hz), settled, then whole periods so the loop is seamless, normalized. */
 const HUM_BASE = 50;
-function humClip(): AudioClip {
+/** Make-up to the old one-pole hum's level: its clip rms 0.565, this 12 dB/oct one's 0.451 at the same peak (measured). */
+const HUM_MAKEUP = 1.25;
+async function renderHum(): Promise<AudioClip> {
   const period = RATE / HUM_BASE;
-  const periods = 20;
-  const warm = period * 10;
-  const a = 1 - Math.exp(-2 * Math.PI * 330 / RATE);
-  const out = new Float32Array(period * periods);
-  let y = 0;
-  for (let i = 0; i < warm + out.length; i++) {
-    const saw = 2 * ((i % period) / period) - 1;
-    y += a * (saw - y);
-    if (i >= warm) out[i - warm] = y;
-  }
+  const periods = 20, warm = period * 10;
+  const off = new OfflineAudioContext(1, warm + period * periods, RATE);
+  const osc = off.createOscillator();
+  osc.type = "sawtooth";
+  osc.frequency.value = HUM_BASE;
+  const lp = off.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 330;
+  osc.connect(lp).connect(off.destination);
+  osc.start();
+  const out = (await off.startRendering()).getChannelData(0).slice(warm);
   let peak = 0;
   for (const v of out) peak = Math.max(peak, Math.abs(v));
   for (let i = 0; i < out.length; i++) out[i] = out[i]! / (peak || 1);
@@ -120,12 +125,16 @@ export function setEngine(on: boolean, speed = 0, throttle = 0): void { engine =
 /** Pause and a hidden window: the hum, the motif and the bed hold. */
 export function setSuspended(on: boolean): void { suspended = on; }
 
-/** Each frame once the mixer runs: the notes and the hum rendered one a frame, the bed and the hum
- * by state, then the motif's notes by mixer time. */
+/** Renders the notes and the hum (from loadSfx). */
+function renderClips(): void {
+  const warn = (e: unknown): void => console.warn(`audio: ${String(e)}`);
+  renderHum().then((c) => { hum = c; }, warn);
+  for (const f of new Set(MOTIF)) renderNote(f, 0.5).then((c) => { notes.set(f, c); }, warn);
+}
+
+/** Each frame once the mixer runs and the hum is rendered: the bed and the hum by state, then the motif's notes by mixer time. */
 export function update(): void {
-  if (context.state !== "running") return;
-  if (!hum) { hum = humClip(); return; }
-  for (const f of new Set(MOTIF)) if (!notes.has(f)) { notes.set(f, noteClip(f, 0.5)); return; }
+  if (context.state !== "running" || !hum) return;
   try {
     const bed = ambienceOn && !suspended;
     if (bed && !ambienceSound) {
@@ -143,7 +152,7 @@ export function update(): void {
       } else {
         const freq = 55 + Math.abs(engine.speed) * 4 + engine.throttle * 40;
         engineSound.setPitch(Math.min(8, freq / HUM_BASE));
-        engineSound.fade((0.05 + engine.throttle * 0.06) * LEVEL.effects, 0.08);
+        engineSound.fade((0.05 + engine.throttle * 0.06) * LEVEL.effects * HUM_MAKEUP, 0.08);
       }
     }
   } catch (e) { console.warn(`audio: ${String(e)}`); return; }
