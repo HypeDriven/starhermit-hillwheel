@@ -1,3 +1,4 @@
+import { withLanguageRender as __l10nRender } from "./l10n/menu.ts";
 // Hillwheel on the StarHermit engine: the entry module (starhermit.txt
 // engine.entry), played natively by the StarHermit client and in browsers by
 // the engine's web runtime. The rules (rules.js), content (content.js) and
@@ -634,10 +635,14 @@ onUpdate((dt) => {
   }
   audio.update();
 });
-onRender((alpha) => {
+onRender(__l10nRender((alpha) => {
   pedalRects.clear();
   drawScreens();
   const s = app.session;
   const a = app.phase === "active" ? Math.min(1, Math.max(0, alpha)) : 1;
   render.update(app.prevVehicle, s ? s.state.vehicle : null, a, s ? s.state : null, frameDt);
-});
+}));
+
+// localization-runtime:menu
+import { installLanguageMenu as __installLanguageMenu } from "./l10n/menu.ts";
+__installLanguageMenu(false);

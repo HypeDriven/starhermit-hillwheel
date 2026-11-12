@@ -1,3 +1,7 @@
+import { localizedStyle as __l10nStyle } from "./l10n/font.ts";
+import { localizedDrawOptions as __l10nDrawOptions } from "./l10n/font.ts";
+// localization-runtime:attached
+import { openLocalizedOptions as __l10nOptions } from "./l10n/menu.ts";
 // The browser build's DOM shell (ui.js + style.css) as starhermit:ui, built
 // every frame over the hills: the title (key art, name and tagline, the
 // signed-in profile line with avatar and sync status, Quick play with its
@@ -12,7 +16,21 @@
 // roomier HUD), portrait phone (≤ 640 px wide: bottom-sheet panels, taller
 // pedals, no speed line), short landscape (≤ 500 px tall: slim HUD, no key
 // hints on the pedals).
-import { frame, openMenu } from "starhermit:engine";
+// The browser build's DOM shell (ui.js + style.css) as starhermit:ui, built
+// every frame over the hills: the title (key art, name and tagline, the
+// signed-in profile line with avatar and sync status, Quick play with its
+// note, the five mode buttons with their one-line descriptions, the controls
+// strip, Leaderboards / Settings / How to play / Invite / Sign in), the mode
+// setup lists, Settings, How to play, Leaderboards; the run's HUD (pause
+// button, objective and course track, speed and cans, the fuel meter, the
+// score), the coaching banner, the four-pedal tray (left-handed mirrors it,
+// the lesson's pedal pulses), the 3-2-1 countdown, the pause and results
+// panels, and the account toast. The browser's media queries are layouts
+// picked by the window's logical size: desktop (≥ 1024 px: a wider panel,
+// roomier HUD), portrait phone (≤ 640 px wide: bottom-sheet panels, taller
+// pedals, no speed line), short landscape (≤ 500 px tall: slim HUD, no key
+// hints on the pedals).
+import { frame } from "starhermit:engine";
 import { requestRebind } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
@@ -52,9 +70,9 @@ function button(b: Btn, width: number | null = null): void {
   if (width != null && buttonWidth(b.text, style) > width) {
     const inner = Math.max(20, width - 40);
     const align = style === "btn-primary" || style === "btn-small" ? "center" : "start";
-    opts.content = () => { ui.style({ text: { align } }).paragraph(b.text, inner); };
+    opts.content = () => { ui.style(__l10nStyle({ text: { align } })).paragraph(b.text, inner); };
   }
-  if (ui.style(style, s).id(b.id).button(b.text, opts)) b.act();
+  if (ui.style(__l10nStyle(style), __l10nStyle(s)).id(b.id).button(b.text, opts)) b.act();
 }
 /** Buttons at their own widths in rows that wrap at `width` (CSS flex-wrap). */
 function flow(label: string, list: Btn[], width: number, gap = 8, align: "start" | "center" = "start"): void {
@@ -67,21 +85,21 @@ function para(text: string, width: number, cls = "body", id?: string, center = f
   if (!text) return;
   const styles: (string | ui.Style)[] = [cls];
   if (center) styles.push({ text: { align: "center" } });
-  let u = ui.style(...styles);
+  let u = ui.style(...__l10nStyle(styles));
   if (id) u = u.id(id);
   if (ui.measureText(text, { style: styles }).width / prefs().scale <= width) u.label(text);
   else u.paragraph(text, width);
 }
 function heading(cls: string, text: string, width: number, id?: string): void {
   if (ui.measureText(text, { kind: "heading", style: [cls] }).width / prefs().scale <= width) (id ? ui.id(id) : ui).style(cls).heading(text);
-  else ui.style(cls).paragraph(text, width);
+  else ui.style(__l10nStyle(cls)).paragraph(text, width);
 }
 /** A two-column definition list (ui.js dl.hw-score-table): label left, value right. */
 function dl(id: string, rows: [string, string, boolean?][], w: number): void {
   ui.column(id, () => rows.forEach(([k, v, total], i) => ui.row(`${id}-${i}`, () => {
     para(k, w - 80, total ? "total" : "dt");
     ui.spacer();
-    ui.style(total ? "total" : "dd").id(`${id}-${i}-v`).label(v);
+    ui.style(__l10nStyle(total ? "total" : "dd")).id(`${id}-${i}-v`).label(v);
   }, { width: w, align: "center", ...(total ? { style: "total-row" } : {}) })), { spacing: 4, width: w });
 }
 
@@ -171,7 +189,7 @@ function titleScreen(w: number): void {
   ui.column("modes", () => {
     for (const [mode, label] of modes) {
       const desc = T(MODE_DESCRIPTIONS[mode]);
-      if (ui.style("btn-mode", { width: w }).id(`mode-${mode}`).button(`${label}. ${desc}`, {
+      if (ui.style(__l10nStyle("btn-mode"), __l10nStyle({ width: w })).id(`mode-${mode}`).button(`${label}. ${desc}`, {
         content: () => ui.column(`mode-${mode}-face`, () => {
           para(label, w - 32, "mode-label");
           para(desc, w - 32, "mode-desc");
@@ -252,7 +270,7 @@ function settingsForm(w: number): void {
     ui.row("palette-row", () => {
       para(T("Colour palette"), Math.max(80, w * 0.45), "body");
       ui.spacer();
-      const next = ui.style({ width: Math.min(200, w * 0.5) }).id("set-palette").select(T("Colour palette"), cur, PALETTES.map((p) => T(PALETTE_NAMES[p])));
+      const next = ui.style(__l10nStyle({ width: Math.min(200, w * 0.5) })).id("set-palette").select(T("Colour palette"), cur, PALETTES.map((p) => T(PALETTE_NAMES[p])));
       if (next !== cur) platform.setSetting("palette", PALETTES[next]!);
     }, { width: w, align: "center", spacing: 10 });
     check("leftHanded", T("Left-handed pedals"));
@@ -260,7 +278,7 @@ function settingsForm(w: number): void {
     check("telemetryConsent", T("Share anonymous telemetry"));
     para(T("Sound, graphics, language, reduced motion, high contrast and larger text are in the StarHermit Options."), w, "gfx-note", "options-note");
     flow("options-btns", [
-      { id: "btn-options", text: T("Open Options"), style: "btn-small", act: () => openMenu() },
+      { id: "btn-options", text: T("Open Options"), style: "btn-small", act: () => __l10nOptions() },
       { id: "btn-rebind", text: T("Keyboard bindings"), style: "btn-small", act: () => requestRebind() },
     ], w);
   }, { style: "section", width: w, spacing: 8 });
@@ -365,17 +383,17 @@ function hudTop(L: Layout): void {
     pauseButton();
     ui.column("hud-objective", () => {
       const cls = textWidth(obj, "hud-obj") <= objW ? "hud-obj" : "hud-obj-small";
-      ui.style(cls, { width: objW, text: { overflow: "ellipsis" } }).id("hud-objective-text").label(obj);
+      ui.style(__l10nStyle(cls), __l10nStyle({ width: objW, text: { overflow: "ellipsis" } })).id("hud-objective-text").label(obj);
       courseTrack(Math.min(320, objW - 8));
     }, { spacing: 4, width: objW });
-    if (showMirror) ui.style("hud-mirror").id("hud-mirror").label(app.mirror);
+    if (showMirror) ui.style(__l10nStyle("hud-mirror")).id("hud-mirror").label(app.mirror);
     ui.column("hud-fuel", () => {
-      ui.style("hud-label").label(T("FUEL"));
+      ui.style(__l10nStyle("hud-label")).label(T("FUEL"));
       fuelMeter(fuelW);
     }, { spacing: 3, align: "end", width: fuelColW });
     ui.column("hud-score", () => {
-      ui.style("hud-label").label(T("SCORE"));
-      ui.style("hud-score").id("hud-score-value").label(score);
+      ui.style(__l10nStyle("hud-label")).label(T("SCORE"));
+      ui.style(__l10nStyle("hud-score")).id("hud-score-value").label(score);
     }, { spacing: 3, align: "end", width: scoreW });
   }, { spacing: gap, align: "center", width: L.lw - 2 * padX }));
 }
@@ -457,9 +475,9 @@ function tray(L: Layout): number {
           const ks = 12 * k * ui.preferences().textScale;
           const total = ls + (keys ? ks + 3 * k : 0);
           let y = rect.y + (rect.height - total) / 2;
-          draw.text(label, cx, y, { size: ls, color: st.colors.text, align: "center", weight: "600" });
+          draw.text(label, cx, y, __l10nDrawOptions({ size: ls, color: st.colors.text, align: "center", weight: "600" }));
           y += ls + 3 * k;
-          if (keys) draw.text(keys, cx, y, { size: ks, color: st.highContrast ? "#ffffff" : "#b8c8bc", align: "center" });
+          if (keys) draw.text(keys, cx, y, __l10nDrawOptions({ size: ks, color: st.highContrast ? "#ffffff" : "#b8c8bc", align: "center" }));
         },
       });
       pedalRects.set(p, { x: r.x, y: r.y, width: r.width, height: r.height });
