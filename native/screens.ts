@@ -116,7 +116,11 @@ export function drawScreens(): void {
     case "title": page("title", L, titleScreen); break;
     case "setup": page("setup", L, setupScreen); break;
     case "settings": page("settings", L, settingsScreen); break;
-    case "help": page("help", L, helpScreen); break;
+    case "help": {
+      const version = JSON.stringify(["throttle", "brake", "tilt_back", "tilt_forward", "pause", "undo", "recenter"].map((action) => keysFor(action)));
+      ui.retain!("help-screen", version, () => page("help", L, helpScreen));
+      break;
+    }
     case "leaderboard": page("leaderboard", L, leaderboardScreen); break;
     case "game": gameScreen(L); break;
   }

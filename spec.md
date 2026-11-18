@@ -16,7 +16,7 @@ green flag before the tank runs dry.
 | Genre | Side-on physics hill-climb driving, single player |
 | Players | 1, local; ranked comparison is asynchronous via the Daily |
 | Session length | 25–90 s per run; 5–10 min per sitting |
-| Platforms | The StarHermit engine 1.39.0 (host API 1.39): natively in the StarHermit client and in browsers through the engine's web runtime; desktop (keyboard, mouse, gamepad) and mobile (touch pedals), portrait and landscape |
+| Platforms | The StarHermit engine 1.44.1 (host API 1.44): natively in the StarHermit client and in browsers through the engine's web runtime; desktop (keyboard, mouse, gamepad) and mobile (touch pedals), portrait and landscape |
 | Rendering | `starhermit:scene` (three.js-like scene graph) for the hills; `starhermit:ui` (immediate mode) for every screen and the HUD |
 | Simulation | Fixed 60 Hz integer-quantized step on the runtime's fixed steps, seeded, replayable |
 
@@ -24,11 +24,11 @@ green flag before the tank runs dry.
 
 | Path | Responsibility |
 |---|---|
-| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.39.0`, `engine.minor=39`, capabilities `platform,storage,clipboard`, the `control.*` actions and their `engine.gamepad.*` defaults |
+| `starhermit.txt` | Manifest: `launch=index.html`, `engine.entry=native/main.ts`, `engine.version=1.44.1`, `engine.minor=44`, capabilities `platform,storage,clipboard`, the `control.*` actions and their `engine.gamepad.*` defaults |
 | `index.html`, `starhermit-files.json` | The engine's web loader and file index, written by `npm run package` (`starhermit package --web .`); never edited by hand |
 | `native/main.ts` | Entry: phase machine, fixed-step loop, countdown, input (actions, pedals by touch/mouse, hold or toggle), coaching, undo, achievements, progression, results, leaderboard posting, lifecycle |
 | `native/screens.ts` | Every screen, the HUD, pedal tray, countdown, pause and results panels, toast (`starhermit:ui`) |
-| `native/render.ts` | The 3D scene (`starhermit:scene`): terrain, ridges, sky, clouds, stars, buggy, cans, flags, arch, trees, rocks, tufts, particles, camera, lights, post effects |
+| `native/render.ts` | The 3D scene (`starhermit:scene`): terrain, ridges, sky, clouds, stars, buggy, cans, flags, arch, trees, rocks, tufts, native GPU particles with CPU fallback, camera, lights, post effects; static terrain and foliage carry shadow-cache mobility hints |
 | `native/quality.ts` | The old presets and budgets per runtime quality tier and level |
 | `native/audio.ts` | One-shots, wind bed, motif and engine hum on `starhermit:audio` |
 | `native/platform.ts` | Progress save (device + cloud, conflict merge, old-save migration), game options, player/avatar/invite, server clock, leaderboard read and posting |
@@ -354,11 +354,7 @@ A level change applies at once (shadow, post and environment settings; asset cha
 level's views from the same seed). The old per-effect overrides are not offered. The track profile and
 everything the vehicle touches are identical on every level.
 
-**Engine port notes.** Light intensities are three.js r185's (minor 23+); the sky and the billboard particles
-(dust, sparkles, stars: an instanced quad turned to the camera, size/alpha in `instanceCustom`) are
-WGSL `ShaderMaterial`s; the terrain noise is a WGSL surface hook; the post chain is `renderer.ao`
-(GTAO), `bloom` (threshold 0.92, 2.2 on snow), `grade` (display space) and `antialias`; the shadow
-follows the vehicle in the page's ±30 m `shadow.camera` box.
+**Engine port notes.** Light intensities are three.js r185's (minor 23+); the sky and billboard stars are WGSL `ShaderMaterial`s. Dust, landing puffs and can sparkles use bounded native GPU emitters with automatic CPU fallback, replacing per-frame instance uploads. Static terrain and foliage are marked for the shadow cache. The terrain noise is a WGSL surface hook; the post chain is `renderer.ao` (GTAO), `bloom` (threshold 0.92, 2.2 on snow), `grade` (display space) and `antialias`; the shadow follows the vehicle in the page's ±30 m `shadow.camera` box. The help page replays through retained native UI while its contents are unchanged.
 
 **Visual assets the design calls for:** title key art (§15) and the platform cover; everything in
 the play scene is procedural by design, so no in-game textures or sprites are shipped.
@@ -589,3 +585,7 @@ than a wiring change.
 The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `ja-JP`, `nl-BE`, `zh-SG`, `ms-SG`, `ta-SG`, `zh-HK`, `yue-HK`, `nl-NL`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `da-DE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `su-ID`, `bew-ID`, `km-VN`, `ru-FI`, `ru-EE`, `fur-IT`.
 
 <!-- regional-localization:end -->
+
+## Engine 1.44.1
+
+Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.

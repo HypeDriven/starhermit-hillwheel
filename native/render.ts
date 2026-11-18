@@ -14,9 +14,9 @@
 // follow camera with its look-ahead and event shake, and the key light whose
 // shadow follows the vehicle.
 //
-// From three.js: light intensities are three.js r185's (minor 23+); ShaderMaterials are WGSL (the sky, and one instanced billboard
-// material for the dust, sparkles and stars, which were per-point-size
-// ShaderMaterial Points); the terrain's onBeforeCompile noise is a surface
+// From three.js: light intensities are three.js r185's (minor 23+); ShaderMaterials are WGSL (the sky and the instanced
+// billboard stars); native GPU emitters own dust and sparkle simulation with automatic CPU fallback;
+// the terrain's onBeforeCompile noise is a surface
 // hook; RoomEnvironment(renderer) gives the image-based lighting; the post
 // chain is renderer.ao / bloom / grade / antialias (GTAOPass, UnrealBloomPass
 // threshold 0.92, the GradeShader in display space, FXAA / SMAA / MSAA); the
@@ -27,10 +27,11 @@ import {
   ACESFilmicToneMapping, BackSide, BoxGeometry, BufferAttribute, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DirectionalLight, DodecahedronGeometry, DoubleSide, DynamicDrawUsage, Euler, Float32BufferAttribute, Fog, Group, HemisphereLight,
   IcosahedronGeometry, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, MeshPhysicalMaterial, MeshStandardMaterial,
-  PerspectiveCamera, PlaneGeometry, PMREMGenerator, Quaternion, RoomEnvironment, RoundedBoxGeometry, ShaderMaterial, SphereGeometry, Sprite,
+  PerspectiveCamera, PlaneGeometry, PMREMGenerator, PointsMaterial, Quaternion, RoomEnvironment, RoundedBoxGeometry, ShaderMaterial, SphereGeometry, Sprite,
   SpriteMaterial, SRGBColorSpace, TorusGeometry, Vector3, Vector4, renderer, scene,
   FrontSide, type OrthographicCamera, type Material, type Object3D, type Side, type Texture,
 } from "starhermit:scene";
+import { GPUParticleEmitter } from "starhermit:particles";
 import { frame } from "starhermit:engine";
 import { OffscreenCanvas, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
 import { Content, Rules, type State, type Theme, type Vehicle } from "./game.ts";
@@ -279,8 +280,7 @@ interface Level {
   cans: CanView[]; flags: FlagView[]; cloths: Mesh[]; vehicle: Group; wheels: Group[];
 }
 let level: Level | null = null;
-let particles: { mesh: InstancedMesh; mat: ShaderMaterial; pool: Particle[]; next: number } | null = null;
-interface Particle { life: number; max: number; x: number; y: number; z: number; vx: number; vy: number; vz: number; size: number; g: number; grow: number; r: number; gg: number; b: number; a: number }
+let particles: { dust: GPUParticleEmitter; bursts: GPUParticleEmitter } | null = null;
 let dustColor = new Color();
 let accentColor = new Color();
 let canTaken: boolean[] = [];
@@ -378,6 +378,8 @@ function disposeTree(o: Object3D): void {
 export function unloadLevel(): void {
   if (!level) return;
   scene.remove(level.group);
+  particles?.dust.dispose();
+  particles?.bursts.dispose();
   disposeTree(level.group);
   level = null;
   particles = null;
@@ -628,16 +630,23 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
     receivers.push(tufts);
   }
 
-  // Particle pool: dust, landing puffs and can sparkles (bounded).
+  // Native particle pools: dust, landing puffs and can sparkles (bounded).
   particles = null;
   if (b.particles > 0) {
-    const mat = billboardMaterial();
-    const mesh = billboards(b.particles, mat);
-    group.add(mesh);
-    particles = {
-      mesh, mat, next: 0,
-      pool: Array.from({ length: b.particles }, () => ({ life: 0, max: 1, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, size: 1, g: 0, grow: 0, r: 1, gg: 1, b: 1, a: 1 })),
-    };
+    const map = particleSprite();
+    const dustMat = new PointsMaterial({ size: 1, map, transparent: true, depthWrite: false });
+    const burstMat = new PointsMaterial({ size: 1, map, transparent: true, depthWrite: false });
+    const dust = new GPUParticleEmitter({
+      capacity: Math.max(1, Math.ceil(b.particles * 2 / 3)), material: dustMat, space: "world", shape: "box", extent: [0, 0, 0.6],
+      life: 0.9, velocity: [0, 1.7, 0], gravity: [0, -1.5, 0], size: [1, 2.6], sizeSpread: 0.8, opacity: [0.55, 0],
+    });
+    const bursts = new GPUParticleEmitter({
+      capacity: Math.max(1, Math.floor(b.particles / 3)), material: burstMat, space: "world", shape: "box", extent: [0, 0, 0.4],
+      life: [0.6, 1.1], velocity: [0, 1, 0], gravity: [0, -4, 0], sizeSpread: 0.8, opacity: [1, 0],
+    });
+    dust.frustumCulled = bursts.frustumCulled = false;
+    group.add(dust, bursts);
+    particles = { dust, bursts };
   }
   dustColor = cTrack.clone().lerp(new Color(0xe8dcc0), 0.5);
   accentColor = new Color(t.accent).multiplyScalar(2.2);
@@ -660,10 +669,11 @@ function applyShadowFlags(): void {
   const lv = level;
   if (!lv) return;
   lv.ground.receiveShadow = on;
+  lv.ground.movable = false;
   // The terrain's self-shadowing is the Ultra preset's (art; the old table gave only Ultra 4096 maps).
   lv.ground.castShadow = on && look!.preset === "ultra";
-  for (const o of lv.casters) { o.castShadow = on; o.receiveShadow = on; }
-  for (const o of lv.receivers) o.receiveShadow = on;
+  for (const o of lv.casters) { o.castShadow = on; o.receiveShadow = on; o.movable = false; }
+  for (const o of lv.receivers) { o.receiveShadow = on; o.movable = false; }
 }
 
 /** render.js _buildVehicle: rounded buggy with roll cage, driver, spoked wheels and lights. */
@@ -738,63 +748,32 @@ function buildVehicle(): { group: Group; wheels: Group[] } {
   return { group, wheels };
 }
 
-// -- particles (render.js _emitDust / _burst / _updateParticles) --------------------------------------
-function spawn(): Particle | null {
-  const P = particles;
-  if (!P) return null;
-  const d = P.pool[P.next]!;
-  P.next = (P.next + 1) % P.pool.length;
-  return d;
+// -- native particles --------------------------------------------------------------------------------
+let softParticle: CanvasTexture | null = null;
+function particleSprite(): CanvasTexture {
+  if (softParticle) return softParticle;
+  const c = new OffscreenCanvas(64, 64), g = c.getContext("2d")!;
+  const gradient = g.createRadialGradient(32, 32, 2, 32, 32, 32);
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.4, "rgba(255,255,255,0.65)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gradient; g.fillRect(0, 0, 64, 64);
+  softParticle = new CanvasTexture(c);
+  return softParticle;
 }
 function emitDust(x: number, y: number, vx: number): void {
-  const d = spawn();
-  if (!d) return;
-  d.life = d.max = 0.9; d.x = x; d.y = y; d.z = (Math.random() - 0.5) * 1.2;
-  d.vx = -vx * 0.12; d.vy = 1.2 + Math.random(); d.vz = Math.random() - 0.5;
-  d.size = 0.9 + Math.random() * 0.8; d.g = 1.5; d.grow = 1.6;
-  d.r = dustColor.r; d.gg = dustColor.g; d.b = dustColor.b; d.a = 0.55;
+  if (!particles) return;
+  particles.dust.set({ velocity: [-vx * 0.12, 1.7, 0], color: dustColor });
+  particles.dust.burst(1, [x, y, 0]);
 }
 function burst(x: number, y: number, n: number, color: Color, size: number, speed: number): void {
-  for (let i = 0; i < n; i++) {
-    const d = spawn();
-    if (!d) return;
-    const a = Math.random() * PI * 2, s = speed * (0.4 + Math.random() * 0.6);
-    d.life = d.max = 0.6 + Math.random() * 0.5;
-    d.x = x; d.y = y; d.z = (Math.random() - 0.5) * 0.8;
-    d.vx = Math.cos(a) * s; d.vy = Math.abs(Math.sin(a)) * s + 1; d.vz = (Math.random() - 0.5) * s * 0.5;
-    d.size = size * (0.8 + Math.random() * 0.8); d.g = 4; d.grow = size > 0.5 ? 1.2 : 0;
-    d.r = color.r; d.gg = color.g; d.b = color.b; d.a = size > 0.5 ? 0.5 : 1;
-  }
-}
-function updateParticles(dt: number): void {
-  const P = particles;
-  if (!P) return;
-  const mesh = P.mesh;
-  const mtx = mesh.instanceMatrix.array as Float32Array;
-  const cust = mesh.instanceCustom!.array as Float32Array;
-  const colA = mesh.instanceColor!.array as Float32Array;
-  let n = 0;
-  for (const d of P.pool) {
-    if (d.life <= 0) continue;
-    d.life -= dt;
-    if (d.life <= 0) continue;
-    d.vy -= d.g * dt;
-    d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt;
-    const k = Math.max(0, d.life / d.max);
-    const o = n * 16;
-    mtx[o] = 1; mtx[o + 1] = 0; mtx[o + 2] = 0; mtx[o + 3] = 0;
-    mtx[o + 4] = 0; mtx[o + 5] = 1; mtx[o + 6] = 0; mtx[o + 7] = 0;
-    mtx[o + 8] = 0; mtx[o + 9] = 0; mtx[o + 10] = 1; mtx[o + 11] = 0;
-    mtx[o + 12] = d.x; mtx[o + 13] = d.y; mtx[o + 14] = d.z; mtx[o + 15] = 1;
-    cust[n * 4] = d.size * (1 + (1 - k) * d.grow); cust[n * 4 + 1] = d.a * k; cust[n * 4 + 2] = 0; cust[n * 4 + 3] = 0;
-    colA[n * 3] = d.r; colA[n * 3 + 1] = d.gg; colA[n * 3 + 2] = d.b;
-    n++;
-  }
-  if (n === 0 && mesh.count === 0) return; // nothing alive, nothing to upload
-  mesh.count = n;
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.instanceCustom!.needsUpdate = true;
-  mesh.instanceColor!.needsUpdate = true;
+  if (!particles) return;
+  particles.bursts.material.size = size;
+  particles.bursts.set({
+    size: [1, size > 0.5 ? 2.2 : 1], opacity: [size > 0.5 ? 0.5 : 1, 0],
+    speed: [speed * 0.4, speed], spread: Math.PI, velocitySpread: [speed, speed * 0.5, speed * 0.25],
+  });
+  particles.bursts.burst(n, [x, y, 0], { color });
 }
 
 // -- the camera and shake ----------------------------------------------------------------------------
@@ -924,7 +903,7 @@ function frameLevel(prev: Vehicle, cur: Vehicle, alpha: number, state: State, dt
     if (cur.grounded && !wasGrounded) burst(x, terrain.height(x) + 0.2, 14, dustColor, 0.9, 3);
   }
   wasGrounded = cur.grounded;
-  updateParticles(dt);
+  if (particles) particles.dust.paused = particles.bursts.paused = reducedMotion;
 
   // Camera: critically damped follow, interruptible, reduced-motion aware.
   const targetX = x + CAM.lookAhead * Math.sign(Math.max(0.2, cur.vx || 1));
