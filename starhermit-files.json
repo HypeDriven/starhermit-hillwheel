@@ -24,7 +24,7 @@
     "favicon.png.ktx2": {"sha256": "2f2ac4bd55cfbccb1b453961fea5588569bf633d6dba6ee48a26f756d09976e9", "size": 87776},
     "icon.png": {"sha256": "0961cd9ae836e706c03337731933a66b49048beed74316f3393ae7a61eb2a49e", "size": 7816},
     "icon.png.ktx2": {"sha256": "2f2ac4bd55cfbccb1b453961fea5588569bf633d6dba6ee48a26f756d09976e9", "size": 87776},
-    "index.html": {"sha256": "cd7bde443b22f0c92d4f6a8741dbac83d142122ce4f19932c4a557b7c4d2e64e", "size": 1777},
+    "index.html": {"sha256": "02ccae3882c8c1b209a4848a297df4b89ebcede2430c7e9be20e2964b341a0cb", "size": 1777},
     "native/audio.ts": {"sha256": "61e81c2127518dfe778521dd2d7f3f3ec18bcb5f88eaeaaa27a086db170372d3", "size": 7849},
     "native/cursor.ts": {"sha256": "85df4ef901a920e3779c1bfadc6f480243ce9a17a133113c7f28288b7ab9ae04", "size": 988},
     "native/game.ts": {"sha256": "11930d384ed071c4c1bf92ee2cb7b2ae588f078b466a8fded0b8bf8687009f29", "size": 3739},
@@ -38,7 +38,7 @@
     "native/screens.ts": {"sha256": "c58eb8f61c2a584f43fd547b9304fdc92bc0f3f5b7e6b87bd70e3f12589dca6f", "size": 32915},
     "native/style.ts": {"sha256": "657d5838a8e1a6a6a2a422244ff54e9132f2cf36677dfe96b46772ea13e7c279", "size": 3212},
     "progress.js": {"sha256": "fa2cf8198f745c1540cd3c5250cfd0fb785f96ab40f1e2707404f75e5dacea51", "size": 3798},
-    "publication.json": {"sha256": "066206f17fbc88cf63974069b81d4037365c575787d09a0038f07aa82d76f321", "size": 4305},
+    "publication.json": {"sha256": "6ded822250a48a6db366ceb40025b57eec533b9ee842fd72e5949a85c0ad201f", "size": 4304},
     "rules.js": {"sha256": "002d011c4c611ffa572d47ea8be24b9567fed043a5d702dce760085573868f64", "size": 13659},
     "score-script.js": {"sha256": "2dbfcf68f98b1c687e6c9539fc400ce5cb22a6bf598881342b55383d22db8948", "size": 2486},
     "session.js": {"sha256": "31bf011b7daea386eb0f1b1bd2cc81c63cd1291173bfef318c99a2074b3b092f", "size": 4863},
@@ -59,7 +59,7 @@
     "sfx/ui-click.opus": {"sha256": "c2f274ba00f1765cbdc13def8ffd50f863e16e5f6d62664ad7ca356c1fa5c170", "size": 11002},
     "sfx/vehicle-crash.opus": {"sha256": "2eea3b2ead09089aab4d2cdd06cd43afba2e62ca85e25dc7d1233e8bcacfd052", "size": 27677},
     "sfx/wind-ambience.opus": {"sha256": "801099cfbbdc14598506f8dc22ec25ab388ad7ce9c8cad05d02c963252cf91ec", "size": 70879},
-    "starhermit.txt": {"sha256": "b0993fc35a8995a7051454eedd46aeca93020457153b3d065bf37efabc3a1562", "size": 1921}
+    "starhermit.txt": {"sha256": "6b42c0ff5f065a4d65602a8b2f4ea03cd0d4b62c6b63cda43dedfa7b9f6137d9", "size": 1921}
   },
   "excluded": ["LICENSE.md", "coverart.png", "data/", "node_modules/", "package-lock.json", "package.json", "server.js", "sfx/manifest.json", "sfx/manifest.md", "sfx/manifest.txt", "spec.md", "test.js", "tests/", "tools/", "tsconfig.json"],
   "format": 1
