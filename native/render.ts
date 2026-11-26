@@ -166,14 +166,14 @@ fn vertex(v: Vertex) -> Vertex {
 const BILLBOARD_FRAG = /* wgsl */ `
 fn fragment(f: Fragment) -> vec4f {
   let p = f.v0.xy - vec2f(0.5, 0.5);
-  let tw = mix(1.0, 0.55 + 0.45 * sin(uniforms.uTime * 2.3 + f.v0.w), uniforms.uTwinkle);
+  let tw = mix(1.0, 0.55 + 0.45 * sin(frame_time() * 2.3 + f.v0.w), uniforms.uTwinkle);
   let a = (1.0 - smoothstep(0.1, 0.5, length(p))) * f.v0.z * tw;
   if (a < 0.01) { discard; }
   return vec4f(f.v1.rgb, a);
 }`;
 function billboardMaterial(): ShaderMaterial {
   return new ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uTwinkle: { value: 0 } },
+    uniforms: { uTwinkle: { value: 0 } },
     vertexShader: BILLBOARD_VERT, fragmentShader: BILLBOARD_FRAG,
     transparent: true, depthWrite: false, fog: false,
   });
@@ -397,7 +397,9 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
   const group = new Group();
   const terrain = state.terrain;
   const length = state.goalX;
-  const casters: Object3D[] = [], receivers: Object3D[] = [];
+  // still: scenery that never moves once placed (movable = false). The vehicle, the bobbing cans and
+  // the waving cloths (geometry edited every frame) are left out.
+  const casters: Object3D[] = [], receivers: Object3D[] = [], still: Object3D[] = [];
 
   // Surface height: the rules' profile across the track band, then a rolling slope that falls away
   // behind it, so the course reads as a ridge above a hazy valley (cosmetic; the vehicle only ever
@@ -502,6 +504,7 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
   const vehicle = buildVehicle();
   group.add(vehicle.group);
   vehicle.group.traverse((o) => { if ((o as Mesh).geometry) casters.push(o); });
+  vehicle.group.movable = true; // it moves every frame: never cached
 
   // Fuel cans: glossy jerry cans with a soft halo so they read from far away.
   const canBody = new RoundedBoxGeometry(0.62, 0.82, 0.34, 2, 0.07);
@@ -540,6 +543,7 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
     g.add(pole, top, flag);
     g.position.set(cx, terrain.height(cx) + 2, -0.9);
     casters.push(pole, top, flag);
+    still.push(pole, top);
     group.add(g);
     cloths.push(flag);
     return { group: g, mat };
@@ -553,6 +557,7 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
   goal.position.set(state.goalX, terrain.height(state.goalX) + 2.2, -0.9);
   cloths.push(gf);
   casters.push(gp, gtop, gf);
+  still.push(gp, gtop);
   group.add(goal);
   // Finish arch: two posts and a chequered banner across the track.
   const archMat = lit({ color: 0xf0f0f0, roughness: 0.4, metalness: 0.4 });
@@ -561,13 +566,13 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
   for (const z of [-2.6, 2.6]) {
     const p = new Mesh(post, archMat);
     p.position.set(state.goalX, gy + 3, z);
-    group.add(p); casters.push(p);
+    group.add(p); casters.push(p); still.push(p);
   }
   // The banner spans the track (along z); the chequer faces the camera (+x/−x box faces).
   const checkerMat = lit({ color: 0xffffff, map: checkerTexture(), roughness: 0.6 });
   const banner = new Mesh(new BoxGeometry(0.12, 0.7, 5.4), [checkerMat, checkerMat, archMat, archMat, archMat, archMat]);
   banner.position.set(state.goalX, gy + 5.6, 0);
-  group.add(banner); casters.push(banner);
+  group.add(banner); casters.push(banner); still.push(banner);
 
   // Vegetation and rocks: instanced, deterministic from a decoration-only stream.
   const deco = Rules.mulberry32((seed ^ 0xdec0) >>> 0);
@@ -606,7 +611,7 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
       rocks.setMatrixAt(i, m4);
     }
     rocks.count = rockCount;
-    for (const m of [trunks, lows, highs, rocks]) { group.add(m); if (b.treeShadows) casters.push(m); else receivers.push(m); }
+    for (const m of [trunks, lows, highs, rocks]) { group.add(m); still.push(m); if (b.treeShadows) casters.push(m); else receivers.push(m); }
   }
 
   // Grass tufts along the track edges (detailed terrain only).
@@ -627,7 +632,7 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
     }
     tufts.count = tuftCount;
     group.add(tufts);
-    receivers.push(tufts);
+    receivers.push(tufts); still.push(tufts);
   }
 
   // Native particle pools: dust, landing puffs and can sparkles (bounded).
@@ -651,6 +656,9 @@ export function loadLevel(state: State, themeId: string, seed: number): void {
   dustColor = cTrack.clone().lerp(new Color(0xe8dcc0), 0.5);
   accentColor = new Color(t.accent).multiplyScalar(2.2);
 
+  // Still scenery (host API 1.49): cached in shadow maps from the first frame, skipped by the sync.
+  ground.movable = false;
+  for (const o of still) o.movable = false;
   level = { group, ground, casters, receivers, state, themeId, seed, cans, flags, cloths, vehicle: vehicle.group, wheels: vehicle.wheels };
   applyTheme(t);
   applyShadowFlags();
@@ -669,11 +677,10 @@ function applyShadowFlags(): void {
   const lv = level;
   if (!lv) return;
   lv.ground.receiveShadow = on;
-  lv.ground.movable = false;
   // The terrain's self-shadowing is the Ultra preset's (art; the old table gave only Ultra 4096 maps).
   lv.ground.castShadow = on && look!.preset === "ultra";
-  for (const o of lv.casters) { o.castShadow = on; o.receiveShadow = on; o.movable = false; }
-  for (const o of lv.receivers) { o.receiveShadow = on; o.movable = false; }
+  for (const o of lv.casters) { o.castShadow = on; o.receiveShadow = on; }
+  for (const o of lv.receivers) o.receiveShadow = on;
 }
 
 /** render.js _buildVehicle: rounded buggy with roll cage, driver, spoked wheels and lights. */
@@ -847,8 +854,10 @@ export function update(prev: Vehicle | null, cur: Vehicle | null, alpha: number,
   skyDeco.position.set(camera.position.x * 0.85, camera.position.y, 0);
   sky.position.copy(camera.position);
   layoutClouds();
-  starMat.uniforms.uTime!.value = skyTime;
-  starMat.uniforms.uTwinkle!.value = animated ? 1 : 0;
+  // The twinkle runs on the engine clock (frame_time()); held, it is off (uTwinkle 0), so only the
+  // switch is written.
+  const twinkle = animated ? 1 : 0;
+  if (starMat.uniforms.uTwinkle!.value !== twinkle) starMat.uniforms.uTwinkle!.value = twinkle;
   if (level) {
     level.cloths.forEach((cloth, ci) => {
       const p = cloth.geometry.getAttribute("position") as BufferAttribute;
