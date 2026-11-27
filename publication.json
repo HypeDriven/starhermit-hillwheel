@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-09-01T07:01:01.756518+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-26T20:48:39.766997+00:00",
+    "coverArtUpdatedAt": "2026-11-27T17:06:47.550203+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-26T20:48:39.751339+00:00",
+      "deployedAt": "2026-11-27T17:06:47.540022+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.51.0",
+      "engineVersion": "1.53.0",
       "deployWarning": null
     },
     "description": "Drive over rolling hills, balance your vehicle in the air, and reach the finish before your fuel runs out.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-26T20:48:39.978Z",
-  "sourceCommit": "02286b5980b4e163500225ae8f6d8784572c30df",
-  "bytesReceived": 2093138,
-  "archiveSha256": "fa1d24acb93c6e05f313c39522d0743723a96deb7a58a6da76b40d4e18e3ff85",
+  "publishedAt": "2026-11-27T17:06:47.722Z",
+  "sourceCommit": "5362a2827504d583a8f83614a4e41aeb35d18c20",
+  "bytesReceived": 2093125,
+  "archiveSha256": "ce71997974d0c541699d5a086fd5953d3ce31de0775382cae644e6fab1e197e0",
   "indexSha256": "c325c8c26b1333c02dfa36b41904474b21f36181239df0cc0abd739460d0d6fc",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 2093138,
+    "bytesReceived": 2093125,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.51.0",
+    "engineVersion": "1.53.0",
     "deployWarning": null
   },
   "liveVerification": {
