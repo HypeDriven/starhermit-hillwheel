@@ -48,7 +48,6 @@ export function loadSfx(): void {
   for (const name of [...new Set(Object.values(EVENT_SAMPLES).flat()), AMBIENCE_CLIP]) {
     loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
   }
-  renderClips();
 }
 
 /** audio.js event(): an event's sample (once loaded); `variant` picks among several. */
@@ -133,7 +132,17 @@ function renderClips(): void {
 }
 
 /** Each frame once the mixer runs and the hum is rendered: the bed and the hum by state, then the motif's notes by mixer time. */
+let __bedsStarted = false;
+function startBeds(): void {
+  if (__bedsStarted) return;
+  __bedsStarted = true;
+  void (async () => {
+    renderClips();
+  })();
+}
+
 export function update(): void {
+  startBeds();
   if (context.state !== "running" || !hum) return;
   try {
     const bed = ambienceOn && !suspended;
